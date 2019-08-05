@@ -1,6 +1,7 @@
 package afero
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 	"time"
@@ -288,3 +289,16 @@ func (u *CacheOnReadFs) Create(name string) (File, error) {
 	}
 	return &UnionFile{Base: bfh, Layer: lfh}, nil
 }
+
+func (b *CacheOnReadFs) CanMmap() bool {
+	return false
+}
+
+func (b *CacheOnReadFs) Mmap(file File, offset int64, length int, prot int, flags int) ([]byte, error) {
+	return nil, fmt.Errorf("mmap not implemented")
+}
+
+func (b *CacheOnReadFs) Munmap(data []byte) error {
+	return fmt.Errorf("mmap not implemented")
+}
+

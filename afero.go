@@ -49,6 +49,15 @@ type File interface {
 	Sync() error
 	Truncate(size int64) error
 	WriteString(s string) (ret int, err error)
+
+	// Specify if the file system supports mapping file to memory
+	CanMmap() bool
+
+	// MMap map the file to memory
+	Mmap(offset int64, length int, prot int, flags int) ([]byte, error)
+
+	//Munmap unmap the file from memory
+	Munmap() error
 }
 
 // Fs is the filesystem interface.
@@ -91,10 +100,10 @@ type Fs interface {
 	// The name of this FileSystem
 	Name() string
 
-	//Chmod changes the mode of the named file to mode.
+	// Chmod changes the mode of the named file to mode.
 	Chmod(name string, mode os.FileMode) error
 
-	//Chtimes changes the access and modification times of the named file
+	// Chtimes changes the access and modification times of the named file
 	Chtimes(name string, atime time.Time, mtime time.Time) error
 }
 

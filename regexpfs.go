@@ -212,3 +212,16 @@ func (f *RegexpFile) Truncate(s int64) error {
 func (f *RegexpFile) WriteString(s string) (int, error) {
 	return f.f.WriteString(s)
 }
+
+
+func (f *RegexpFile) CanMmap() bool {
+	return f.f.CanMmap()
+}
+
+func (f *RegexpFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
+	return f.f.Mmap(offset, length, prot, flags)
+}
+
+func (f *RegexpFile) Munmap() error {
+	return f.f.Munmap()
+}

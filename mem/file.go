@@ -17,6 +17,7 @@ package mem
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -269,6 +270,19 @@ func (f *File) WriteString(s string) (ret int, err error) {
 
 func (f *File) Info() *FileInfo {
 	return &FileInfo{f.fileData}
+}
+
+func (f *File) CanMmap() bool {
+	// TODO
+	return false
+}
+
+func (f *File) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
+	return nil, fmt.Errorf("mmap not supported")
+}
+
+func (f *File) Munmap() error {
+	return fmt.Errorf("mmap not supported")
 }
 
 type FileInfo struct {

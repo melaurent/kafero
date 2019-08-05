@@ -1,6 +1,7 @@
 package afero
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -271,6 +272,18 @@ func (f *UnionFile) WriteString(s string) (n int, err error) {
 	return 0, BADFD
 }
 
+func (f *UnionFile) CanMmap() bool {
+	return false
+}
+
+func (f *UnionFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
+	return nil, fmt.Errorf("mmap not supported")
+}
+
+func (f *UnionFile) Munmap() error {
+	return fmt.Errorf("mmap not supported")
+}
+
 func copyToLayer(base Fs, layer Fs, name string) error {
 	bfh, err := base.Open(name)
 	if err != nil {
@@ -318,3 +331,4 @@ func copyToLayer(base Fs, layer Fs, name string) error {
 	}
 	return layer.Chtimes(name, bfi.ModTime(), bfi.ModTime())
 }
+

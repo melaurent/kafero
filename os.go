@@ -15,7 +15,10 @@
 package afero
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -40,7 +43,7 @@ func (OsFs) Create(name string) (File, error) {
 		// a nil value of type *os.File or nil won't be nil
 		return nil, e
 	}
-	return f, e
+	return &OsFile{f: f}, e
 }
 
 func (OsFs) Mkdir(name string, perm os.FileMode) error {
@@ -58,7 +61,7 @@ func (OsFs) Open(name string) (File, error) {
 		// a nil value of type *os.File or nil won't be nil
 		return nil, e
 	}
-	return f, e
+	return &OsFile{f: f}, e
 }
 
 func (OsFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
@@ -68,7 +71,7 @@ func (OsFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 		// a nil value of type *os.File or nil won't be nil
 		return nil, e
 	}
-	return f, e
+	return &OsFile{f: f}, e
 }
 
 func (OsFs) Remove(name string) error {
@@ -99,3 +102,89 @@ func (OsFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 	fi, err := os.Lstat(name)
 	return fi, true, err
 }
+
+func (OsFs) Walk(root string, walkFn filepath.WalkFunc) error {
+	return filepath.Walk(root, walkFn)
+}
+
+type OsFile struct {
+	f    *os.File
+	mmap []byte
+}
+
+func (f *OsFile) Close() error {
+	if f.mmap != nil {
+		if err := f.Munmap(); err != nil {
+			return fmt.Errorf("error unmmapping file: %v", err)
+		}
+	}
+	return f.f.Close()
+}
+
+func (f *OsFile) Read(s []byte) (int, error) {
+	return f.f.Read(s)
+}
+
+func (f *OsFile) ReadAt(s []byte, o int64) (int, error) {
+	return f.f.ReadAt(s, o)
+}
+
+func (f *OsFile) Seek(o int64, w int) (int64, error) {
+	return f.f.Seek(o, w)
+}
+
+func (f *OsFile) Write(s []byte) (int, error) {
+	return f.f.Write(s)
+}
+
+func (f *OsFile) WriteAt(s []byte, o int64) (int, error) {
+	return f.f.WriteAt(s, o)
+}
+
+func (f *OsFile) Name() string {
+	return f.f.Name()
+}
+
+func (f *OsFile) Readdir(count int) ([]os.FileInfo, error) {
+	return f.f.Readdir(count)
+}
+
+func (f *OsFile) Readdirnames(n int) ([]string, error) {
+	return f.f.Readdirnames(n)
+}
+
+func (f *OsFile) Stat() (os.FileInfo, error) {
+	return f.f.Stat()
+}
+
+func (f *OsFile) Sync() error {
+	return f.f.Sync()
+}
+
+func (f *OsFile) Truncate(size int64) error {
+	return f.f.Truncate(size)
+}
+
+func (f *OsFile) WriteString(s string) (ret int, err error) {
+	return f.f.WriteString(s)
+}
+
+func (f *OsFile) CanMmap() bool {
+	return true
+}
+
+func (f *OsFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
+	fd := f.f.Fd()
+	return syscall.Mmap(int(fd), offset, length, prot, flags)
+}
+
+func (f *OsFile) Munmap() error {
+	if f.mmap == nil {
+		return fmt.Errorf("file not mmapped")
+	}
+	if err := syscall.Munmap(f.mmap); err != nil {
+		return fmt.Errorf("error unmapping file: %v", err)
+	}
+	return nil
+}
+
