@@ -15,6 +15,7 @@ package gcs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,19 +131,22 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (*GcsFile, er
 	}
 
 	if flag&os.O_TRUNC != 0 {
-		file.resource.obj.Delete(fs.ctx)
+		if err := file.resource.obj.Delete(fs.ctx); err != nil {
+			return nil, fmt.Errorf("error deleting resource: %v", err)
+		}
 		return fs.Create(name)
 	}
 
 	if flag&os.O_APPEND != 0 {
-		_, err := file.Seek(0, 2)
-		if err != nil {
-			return nil, err
+		if _, err := file.Seek(0, 2); err != nil {
+			return nil, fmt.Errorf("error seeking to end of file: %v", err)
 		}
 	}
 
 	if flag&os.O_CREATE != 0 {
-		file.WriteString("")
+		if _, err := file.WriteString(""); err != nil {
+			return nil, fmt.Errorf("error writing string to file: %v", err)
+		}
 	}
 	return file, nil
 }
@@ -164,9 +168,11 @@ func (fs *GcsFs) RemoveAll(path string) error {
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("error iterating objects: %v", err)
 		}
-		fs.Remove(objAttrs.Name)
+		if err := fs.Remove(objAttrs.Name); err != nil {
+			return fmt.Errorf("error removing object: %v", err)
+		}
 	}
 	return nil
 }
