@@ -358,20 +358,6 @@ func (m *MemMapFs) List() {
 	}
 }
 
-func (m *MemMapFs) CanMmap() bool {
-	// TODO easy
-	return false
-}
-
-func (m *MemMapFs) Mmap(file File, offset int64, length int, prot int, flags int) ([]byte, error) {
-
-	return nil, fmt.Errorf("mmap not implemented")
-}
-
-func (m *MemMapFs) Munmap(data []byte) error {
-	return fmt.Errorf("mmap not implemented")
-}
-
 
 // func debugMemMapList(fs Fs) {
 // 	if x, ok := fs.(*MemMapFs); ok {

@@ -14,6 +14,7 @@
 package sftpfs
 
 import (
+	"fmt"
 	"github.com/pkg/sftp"
 	"os"
 )
@@ -93,3 +94,16 @@ func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 func (f *File) WriteString(s string) (ret int, err error) {
 	return f.fd.Write([]byte(s))
 }
+
+func (f *File) CanMmap() bool {
+	return false
+}
+
+func (f *File) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
+	return nil, fmt.Errorf("mmap not supported")
+}
+
+func (f *File) Munmap() error {
+	return fmt.Errorf("mmap not supported")
+}
+
