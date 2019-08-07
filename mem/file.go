@@ -312,6 +312,7 @@ func (s *FileInfo) IsDir() bool {
 	return s.dir
 }
 func (s *FileInfo) Sys() interface{} { return nil }
+
 func (s *FileInfo) Size() int64 {
 	if s.IsDir() {
 		return int64(42)

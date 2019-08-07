@@ -15,11 +15,10 @@ package gcs
 
 import (
 	"bytes"
+	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"io"
-
-	"cloud.google.com/go/storage"
 )
 
 // gcsFileResource represents a singleton version of each GCS object;

@@ -1,8 +1,6 @@
-![afero logo-sm](https://cloud.githubusercontent.com/assets/173412/11490338/d50e16dc-97a5-11e5-8b12-019a300d0fcb.png)
+Fork of the deceased or very inactive package Afero
 
-A FileSystem Abstraction System for Go
-
-[![Build Status](https://travis-ci.org/spf13/afero.svg)](https://travis-ci.org/spf13/afero) [![Build status](https://ci.appveyor.com/api/projects/status/github/spf13/afero?branch=master&svg=true)](https://ci.appveyor.com/project/spf13/afero) [![GoDoc](https://godoc.org/github.com/spf13/afero?status.svg)](https://godoc.org/github.com/spf13/afero) [![Join the chat at https://gitter.im/spf13/afero](https://badges.gitter.im/Dev%20Chat.svg)](https://gitter.im/spf13/afero?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](https://travis-ci.org/spf13/afero.svg)](https://travis-ci.org/spf13/kafero) [![Build status](https://ci.appveyor.com/api/projects/status/github/melaurent/kafero?branch=master&svg=true)](https://ci.appveyor.com/project/melaurent/kafero) [![GoDoc](https://godoc.org/github.com/spf13/afero?status.svg)](https://godoc.org/github.com/spf13/afero) [![Join the chat at https://gitter.im/spf13/afero](https://badges.gitter.im/Dev%20Chat.svg)](https://gitter.im/spf13/afero?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 # Overview
 
@@ -54,7 +52,7 @@ First use go get to install the latest version of the library.
 
 Next include Afero in your application.
 ```go
-import "github.com/spf13/afero"
+import "github.com/melaurent/kafero"
 ```
 
 ## Step 2: Declare a backend

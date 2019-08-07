@@ -65,22 +65,6 @@ func NewGcsFile(
 	}
 }
 
-func NewGcsFileFromOldFH(
-	openFlags int,
-	fileMode os.FileMode,
-	oldFile *gcsFileResource,
-) *GcsFile {
-	return &GcsFile{
-		openFlags: openFlags,
-		fileMode:  fileMode,
-		fhoffset:  0,
-		closed:    false,
-		ReadDirIt: nil,
-
-		resource: oldFile,
-	}
-}
-
 func (f *GcsFile) Close() error {
 	// There shouldn't be a case where both are open at the same time
 	// but the check is omitted at this time.
@@ -92,7 +76,6 @@ func (f *GcsFile) Seek(newOffset int64, whence int) (int64, error) {
 	if f.closed {
 		return 0, ErrFileClosed
 	}
-
 	//Since this is an expensive operation; let's make sure we need it
 	if (whence == 0 && newOffset == f.fhoffset) || (whence == 1 && newOffset == 0) {
 		return f.fhoffset, nil
@@ -162,9 +145,11 @@ func (f *GcsFile) readdir(count int) ([]*fileInfo, error) {
 	//normSeparators should maybe not be here; adds
 	path := f.resource.fs.ensureTrailingSeparator(normSeparators(f.Name(), f.resource.fs.separator))
 	if f.ReadDirIt == nil {
-		//log.Printf("Querying path : %s\n", path)
 		f.ReadDirIt = f.resource.fs.bucket.Objects(
-			f.resource.ctx, &storage.Query{f.resource.fs.separator, path, false})
+			f.resource.ctx, &storage.Query{
+				Delimiter: "/",
+				Prefix:    path,
+				Versions:  false})
 	}
 	var res []*fileInfo
 	for {
@@ -180,7 +165,6 @@ func (f *GcsFile) readdir(count int) ([]*fileInfo, error) {
 		}
 
 		tmp := fileInfo{object, f.resource.fs}
-
 		// Since we create "virtual folders which are empty objects they can sometimes be returned twice
 		// when we do a query (As the query will also return GCS version of "virtual folders" but they only
 		// have a .Prefix, and not .Name)
@@ -249,6 +233,9 @@ func (f *GcsFile) Truncate(wantedSize int64) error {
 	}
 	if f.openFlags & os.O_RDONLY != 0 {
 		return fmt.Errorf("file is read only")
+	}
+	if f.openFlags & os.O_TRUNC == 0 {
+		return fmt.Errorf("file not open in truncate mode")
 	}
 	return f.resource.Truncate(wantedSize)
 }

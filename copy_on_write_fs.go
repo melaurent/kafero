@@ -1,4 +1,4 @@
-package afero
+package kafero
 
 import (
 	"fmt"

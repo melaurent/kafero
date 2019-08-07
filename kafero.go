@@ -20,7 +20,7 @@
 // (cross platform) and an interface that should be implemented if you want to
 // provide your own filesystem.
 
-package afero
+package kafero
 
 import (
 	"errors"

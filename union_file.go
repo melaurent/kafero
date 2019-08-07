@@ -1,4 +1,4 @@
-package afero
+package kafero
 
 import (
 	"fmt"
@@ -34,12 +34,18 @@ func (f *UnionFile) Close() error {
 	// the overlay first, we'd get a cacheStale the next time we access this file
 	// -> cache would be useless ;-)
 	if f.Base != nil {
-		f.Base.Close()
+		if err := f.Base.Close(); err != nil {
+			return fmt.Errorf("error closing base file: %v", err)
+		}
 	}
 	if f.Layer != nil {
-		return f.Layer.Close()
+		if err := f.Layer.Close(); err != nil {
+			return fmt.Errorf("error closing layer file: %v", err)
+		}
+		return nil
+	} else {
+		return BADFD
 	}
-	return BADFD
 }
 
 func (f *UnionFile) Read(s []byte) (int, error) {
@@ -48,7 +54,7 @@ func (f *UnionFile) Read(s []byte) (int, error) {
 		if (err == nil || err == io.EOF) && f.Base != nil {
 			// advance the file position also in the base file, the next
 			// call may be a write at this position (or a seek with SEEK_CUR)
-			if _, seekErr := f.Base.Seek(int64(n), os.SEEK_CUR); seekErr != nil {
+			if _, seekErr := f.Base.Seek(int64(n), io.SeekCurrent); seekErr != nil {
 				// only overwrite err in case the seek fails: we need to
 				// report an eventual io.EOF to the caller
 				err = seekErr
@@ -66,7 +72,7 @@ func (f *UnionFile) ReadAt(s []byte, o int64) (int, error) {
 	if f.Layer != nil {
 		n, err := f.Layer.ReadAt(s, o)
 		if (err == nil || err == io.EOF) && f.Base != nil {
-			_, err = f.Base.Seek(o+int64(n), os.SEEK_SET)
+			_, err = f.Base.Seek(o+int64(n), io.SeekStart)
 		}
 		return n, err
 	}
@@ -93,10 +99,15 @@ func (f *UnionFile) Seek(o int64, w int) (pos int64, err error) {
 func (f *UnionFile) Write(s []byte) (n int, err error) {
 	if f.Layer != nil {
 		n, err = f.Layer.Write(s)
-		if err == nil && f.Base != nil { // hmm, do we have fixed size files where a write may hit the EOF mark?
-			_, err = f.Base.Write(s)
+		if err != nil {
+			return 0, fmt.Errorf("error writing to layer file: %v", err)
 		}
-		return n, err
+		if f.Base != nil { // hmm, do we have fixed size files where a write may hit the EOF mark?
+			if _, err := f.Base.Write(s); err != nil {
+				return 0, fmt.Errorf("error writing to base file: %v", err)
+			}
+		}
+		return n, nil
 	}
 	if f.Base != nil {
 		return f.Base.Write(s)
@@ -289,7 +300,6 @@ func copyToLayer(base Fs, layer Fs, name string) error {
 	if err != nil {
 		return err
 	}
-	defer bfh.Close()
 
 	// First make sure the directory exists
 	exists, err := Exists(layer, filepath.Dir(name))
@@ -311,23 +321,26 @@ func copyToLayer(base Fs, layer Fs, name string) error {
 	n, err := io.Copy(lfh, bfh)
 	if err != nil {
 		// If anything fails, clean up the file
-		layer.Remove(name)
-		lfh.Close()
-		return err
+		_ = layer.Remove(name)
+		_ = lfh.Close()
+		return fmt.Errorf("error copying layer to base: %v", err)
 	}
 
 	bfi, err := bfh.Stat()
 	if err != nil || bfi.Size() != n {
-		layer.Remove(name)
-		lfh.Close()
+		_ = layer.Remove(name)
+		_ = lfh.Close()
 		return syscall.EIO
 	}
 
 	err = lfh.Close()
 	if err != nil {
-		layer.Remove(name)
-		lfh.Close()
+		_ = layer.Remove(name)
+		_ = lfh.Close()
 		return err
+	}
+	if err := bfh.Close(); err != nil {
+		return fmt.Errorf("error closing base file: %v", err)
 	}
 	return layer.Chtimes(name, bfi.ModTime(), bfi.ModTime())
 }

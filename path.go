@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package afero
+package kafero
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,7 +31,9 @@ func readDirNames(fs Fs, dirname string) ([]string, error) {
 		return nil, err
 	}
 	names, err := f.Readdirnames(-1)
-	f.Close()
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("error closing dir file: %v", err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +100,7 @@ func (a Afero) Walk(root string, walkFn filepath.WalkFunc) error {
 	return Walk(a.Fs, root, walkFn)
 }
 
+// TODO should walk without separator suffix work ?
 func Walk(fs Fs, root string, walkFn filepath.WalkFunc) error {
 	info, err := lstatIfPossible(fs, root)
 	if err != nil {

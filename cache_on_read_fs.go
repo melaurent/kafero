@@ -1,4 +1,4 @@
-package afero
+package kafero
 
 import (
 	"os"
@@ -206,8 +206,9 @@ func (u *CacheOnReadFs) OpenFile(name string, flag int, perm os.FileMode) (File,
 			return nil, err
 		}
 		return &UnionFile{Base: bfi, Layer: lfi}, nil
+	} else {
+		return u.layer.OpenFile(name, flag, perm)
 	}
-	return u.layer.OpenFile(name, flag, perm)
 }
 
 func (u *CacheOnReadFs) Open(name string) (File, error) {

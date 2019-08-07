@@ -28,11 +28,7 @@ type fileInfo struct {
 }
 
 func (fi *fileInfo) name() string {
-	if fi.objAtt.Name != "" {
-		return fi.objAtt.Name
-	}
-	//In case of GCS virtual folders; they will only have a prefix
-	return fi.objAtt.Prefix
+	return fi.objAtt.Prefix + fi.objAtt.Name
 }
 
 func (fi *fileInfo) Name() string {
@@ -54,7 +50,7 @@ func (fi *fileInfo) ModTime() time.Time {
 }
 
 func (fi *fileInfo) IsDir() bool {
-	return fi.objAtt.Metadata["virtual_folder"] == "y" || strings.HasSuffix(fi.Name(), fi.fs.separator)
+	return fi.objAtt.Metadata["virtual_folder"] == "y" || strings.HasSuffix(fi.name(), fi.fs.separator)
 }
 
 func (fi *fileInfo) Sys() interface{} {

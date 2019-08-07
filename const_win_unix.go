@@ -16,7 +16,7 @@
 // +build !dragonfly
 // +build !netbsd
 
-package afero
+package kafero
 
 import (
 	"syscall"

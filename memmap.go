@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package afero
+package kafero
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/afero/mem"
+	"github.com/melaurent/kafero/mem"
 )
 
 type MemMapFs struct {

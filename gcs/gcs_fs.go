@@ -16,6 +16,7 @@ package gcs
 import (
 	"context"
 	"fmt"
+	"github.com/melaurent/kafero"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,9 +32,6 @@ type GcsFs struct {
 	client        *storage.Client
 	bucket        *storage.BucketHandle
 	separator     string
-	rawGcsObjects map[string]*GcsFile
-
-	autoRemoveEmptyFolders bool //trigger for creating "virtual folders" (not required by GCSs)
 }
 
 func NewGcsFs(ctx context.Context, cl *storage.Client, bucket string, folderSep string) *GcsFs {
@@ -42,9 +40,6 @@ func NewGcsFs(ctx context.Context, cl *storage.Client, bucket string, folderSep 
 		client:        cl,
 		bucket:        cl.Bucket(bucket),
 		separator:     folderSep,
-		rawGcsObjects: make(map[string]*GcsFile),
-
-		autoRemoveEmptyFolders: true,
 	}
 }
 
@@ -66,26 +61,12 @@ func (fs *GcsFs) getObj(name string) *storage.ObjectHandle {
 
 func (fs *GcsFs) Name() string { return "GcsFs" }
 
-func (fs *GcsFs) Create(name string) (*GcsFile, error) {
-	if !fs.autoRemoveEmptyFolders {
-		baseDir := filepath.Base(name)
-		if stat, err := fs.Stat(baseDir); err != nil || !stat.IsDir() {
-			fs.MkdirAll(baseDir, 0)
-		}
-	}
-
-	obj := fs.getObj(name)
-	w := obj.NewWriter(fs.ctx)
-	if err := w.Close(); err != nil {
-		return nil, err
-	}
-	file := NewGcsFile(fs.ctx, fs, obj, os.O_RDWR, 0, name)
-	fs.rawGcsObjects[name] = file
-	return file, nil
+func (fs *GcsFs) Create(name string) (kafero.File, error) {
+	return fs.OpenFile(name, os.O_RDWR | os.O_CREATE, 0)
 }
 
 func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
-	name = normSeparators(name, fs.separator)
+	name = filepath.Clean(normSeparators(name, fs.separator))
 	obj := fs.getObj(name)
 	w := obj.NewWriter(fs.ctx)
 	if err := w.Close(); err != nil {
@@ -95,7 +76,6 @@ func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
 	meta["virtual_folder"] = "y"
 	_, err := obj.Update(fs.ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
 	//fmt.Printf("Created virtual folder: %v\n", name)
-
 	return err
 }
 
@@ -103,7 +83,7 @@ func (fs *GcsFs) MkdirAll(path string, perm os.FileMode) error {
 	root := ""
 	folders := strings.Split(normSeparators(path, fs.separator), fs.separator)
 	for _, f := range folders {
-		//Don't force a delimiter prefix
+		// Don't force a delimiter prefix
 		if root != "" {
 			root = root + fs.separator + f
 		} else {
@@ -117,37 +97,23 @@ func (fs *GcsFs) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
-func (fs *GcsFs) Open(name string) (*GcsFile, error) {
+func (fs *GcsFs) Open(name string) (kafero.File, error) {
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
-func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (*GcsFile, error) {
-	var file *GcsFile
-	obj, found := fs.rawGcsObjects[name]
-	if found {
-		file = NewGcsFileFromOldFH(flag, perm, obj.resource)
-	} else {
-		file = NewGcsFile(fs.ctx, fs, fs.getObj(name), flag, perm, name)
-	}
-
-	if flag&os.O_TRUNC != 0 {
-		if err := file.resource.obj.Delete(fs.ctx); err != nil {
-			return nil, fmt.Errorf("error deleting resource: %v", err)
-		}
-		return fs.Create(name)
-	}
-
-	if flag&os.O_APPEND != 0 {
-		if _, err := file.Seek(0, 2); err != nil {
-			return nil, fmt.Errorf("error seeking to end of file: %v", err)
+func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File, error) {
+	// If create flag, ensure directory exists
+	if flag & os.O_CREATE != 0 {
+		dir := filepath.Dir(name)
+		if _, err := fs.Stat(dir); err == os.ErrNotExist {
+			if err := fs.MkdirAll(dir, 0); err != nil {
+				return nil, fmt.Errorf("error making all dir: %v", err)
+			}
 		}
 	}
 
-	if flag&os.O_CREATE != 0 {
-		if _, err := file.WriteString(""); err != nil {
-			return nil, fmt.Errorf("error writing string to file: %v", err)
-		}
-	}
+	file := NewGcsFile(fs.ctx, fs, fs.getObj(name), flag, perm, name)
+
 	return file, nil
 }
 
@@ -156,12 +122,14 @@ func (fs *GcsFs) Remove(name string) error {
 	if _, err := fs.Stat(name); err != nil {
 		return err
 	}
-	delete(fs.rawGcsObjects, name)
 	return obj.Delete(fs.ctx)
 }
 
 func (fs *GcsFs) RemoveAll(path string) error {
-	it := fs.bucket.Objects(fs.ctx, &storage.Query{fs.separator, path, false})
+	it := fs.bucket.Objects(fs.ctx, &storage.Query{
+		Delimiter: fs.separator,
+		Prefix: path,
+		Versions: false})
 	for {
 		objAttrs, err := it.Next()
 		if err == iterator.Done {
@@ -184,7 +152,6 @@ func (fs *GcsFs) Rename(oldname, newname string) error {
 	if _, err := dst.CopierFrom(src).Run(fs.ctx); err != nil {
 		return err
 	}
-	delete(fs.rawGcsObjects, oldname)
 	return src.Delete(fs.ctx)
 }
 
@@ -192,7 +159,7 @@ func (fs *GcsFs) Stat(name string) (os.FileInfo, error) {
 	obj := fs.getObj(name)
 	objAttrs, err := obj.Attrs(fs.ctx)
 	if err != nil {
-		if err.Error() == "storage: object doesn't exist" {
+		if err == storage.ErrObjectNotExist {
 			return nil, os.ErrNotExist //works with os.IsNotExist check
 		}
 		return nil, err
@@ -201,11 +168,9 @@ func (fs *GcsFs) Stat(name string) (os.FileInfo, error) {
 }
 
 func (fs *GcsFs) Chmod(name string, mode os.FileMode) error {
-	panic("CHMOD not implemented in GCS")
-	return nil
+	return fmt.Errorf("chmod not implemented")
 }
 
 func (fs *GcsFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	panic("Chtimes not implemented. Create, Delete, Updated times are read only fields in GCS and set implicitly")
-	return nil
+	return 	fmt.Errorf("chtimes not implemented: Create, Delete, Updated times are read only fields in GCS and set implicitly")
 }

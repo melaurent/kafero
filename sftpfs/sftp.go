@@ -14,11 +14,12 @@
 package sftpfs
 
 import (
+	"github.com/spf13/afero"
 	"os"
 	"time"
 
 	"github.com/pkg/sftp"
-	"github.com/spf13/afero"
+	"github.com/melaurent/kafero"
 )
 
 // Fs is a afero.Fs implementation that uses functions provided by the sftp package.
@@ -29,13 +30,13 @@ type Fs struct {
 	client *sftp.Client
 }
 
-func New(client *sftp.Client) afero.Fs {
+func New(client *sftp.Client) kafero.Fs {
 	return &Fs{client: client}
 }
 
 func (s Fs) Name() string { return "sftpfs" }
 
-func (s Fs) Create(name string) (afero.File, error) {
+func (s Fs) Create(name string) (kafero.File, error) {
 	return FileCreate(s.client, name)
 }
 
@@ -90,11 +91,11 @@ func (s Fs) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
-func (s Fs) Open(name string) (afero.File, error) {
+func (s Fs) Open(name string) (kafero.File, error) {
 	return FileOpen(s.client, name)
 }
 
-func (s Fs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
+func (s Fs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File, error) {
 	return nil, nil
 }
 

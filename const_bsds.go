@@ -13,7 +13,7 @@
 
 // +build darwin openbsd freebsd netbsd dragonfly
 
-package afero
+package kafero
 
 import (
 	"syscall"
