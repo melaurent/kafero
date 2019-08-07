@@ -14,12 +14,11 @@
 package sftpfs
 
 import (
-	"github.com/spf13/afero"
 	"os"
 	"time"
 
-	"github.com/pkg/sftp"
 	"github.com/melaurent/kafero"
+	"github.com/pkg/sftp"
 )
 
 // Fs is a afero.Fs implementation that uses functions provided by the sftp package.
