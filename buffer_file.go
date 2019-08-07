@@ -9,8 +9,21 @@ import (
 
 type BufferFile struct {
 	Base    File
-	Buffer  memfile.File
+	Buffer  *memfile.File
 	modTime time.Time
+}
+
+func NewBufferFile(base File) (*BufferFile, error) {
+	bytes, err := ReadAll(base)
+	if err != nil {
+		return nil, fmt.Errorf("error reading base file: %v", err)
+	}
+	// TODO modtime
+	return &BufferFile{
+		Base: base,
+		Buffer: memfile.New(bytes),
+		modTime: time.Now(),
+	}, nil
 }
 
 func (f *BufferFile) Close() error {

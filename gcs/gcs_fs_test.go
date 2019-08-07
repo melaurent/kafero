@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/melaurent/kafero"
-	"github.com/spf13/afero"
 	"google.golang.org/api/option"
 	"os"
 	"testing"

@@ -113,8 +113,11 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File,
 	}
 
 	file := NewGcsFile(fs.ctx, fs, fs.getObj(name), flag, perm, name)
-
-	return file, nil
+	bFile, err := kafero.NewBufferFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("error creating buffer file: %v", err)
+	}
+	return bFile, nil
 }
 
 func (fs *GcsFs) Remove(name string) error {
