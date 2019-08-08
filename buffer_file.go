@@ -21,8 +21,8 @@ func NewBufferFile(base File) (*BufferFile, error) {
 	}
 	// TODO modtime
 	return &BufferFile{
-		Base: base,
-		Buffer: memfile.New(bytes),
+		Base:    base,
+		Buffer:  memfile.New(bytes),
 		modTime: time.Now(),
 	}, nil
 }
@@ -101,6 +101,9 @@ func (f *BufferFile) Sync() error {
 	if _, err := io.Copy(f.Buffer, f.Base); err != nil {
 		return fmt.Errorf("error copying buffer to base file: %v", err)
 	}
+	if err := f.Base.Sync(); err != nil {
+		return fmt.Errorf("error syncing base file: %v", err)
+	}
 	return nil
 }
 
@@ -124,7 +127,6 @@ func (f *BufferFile) Mmap(offset int64, length int, prot int, flags int) ([]byte
 func (f *BufferFile) Munmap() error {
 	return nil
 }
-
 
 type BufferFileInfo struct {
 	baseInfo os.FileInfo
