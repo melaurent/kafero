@@ -43,7 +43,6 @@ type gcsFileResource struct {
 
 func (o *gcsFileResource) Close() error {
 	o.closed = true
-	delete(o.fs.rawGcsObjects, o.name)
 	return o.maybeCloseIo()
 }
 
