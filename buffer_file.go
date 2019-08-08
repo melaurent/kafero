@@ -3,6 +3,7 @@ package kafero
 import (
 	"fmt"
 	"github.com/dsnet/golib/memfile"
+	"io"
 	"os"
 	"time"
 )
@@ -27,9 +28,9 @@ func NewBufferFile(base File) (*BufferFile, error) {
 }
 
 func (f *BufferFile) Close() error {
-	// Copy layer to base
-	// Close layer
-	// Close base
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("error syncing to base file: %v", err)
+	}
 
 	return nil
 }
@@ -94,6 +95,12 @@ func (f *BufferFile) Stat() (os.FileInfo, error) {
 }
 
 func (f *BufferFile) Sync() error {
+	if _, err := f.Base.Seek(0, 0); err != nil {
+		return fmt.Errorf("error seeking base file to start: %v", err)
+	}
+	if _, err := io.Copy(f.Buffer, f.Base); err != nil {
+		return fmt.Errorf("error copying buffer to base file: %v", err)
+	}
 	return nil
 }
 

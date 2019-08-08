@@ -113,6 +113,21 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File,
 	}
 
 	file := NewGcsFile(fs.ctx, fs, fs.getObj(name), flag, perm, name)
+	_, err := file.Stat()
+	if err != nil {
+		if err == os.ErrNotExist {
+			if flag & os.O_CREATE != 0 {
+				// Create file
+				if _, err := file.WriteString(""); err != nil {
+					return nil, fmt.Errorf("error creating file: %v", err)
+				}
+			} else {
+				return nil, fmt.Errorf("file does not exists")
+			}
+		} else {
+			return nil, fmt.Errorf("error getting file stat: %v", err)
+		}
+	}
 	bFile, err := kafero.NewBufferFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("error creating buffer file: %v", err)

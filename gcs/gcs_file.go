@@ -68,6 +68,7 @@ func NewGcsFile(
 func (f *GcsFile) Close() error {
 	// There shouldn't be a case where both are open at the same time
 	// but the check is omitted at this time.
+	fmt.Println("CLOSING GCS FILE")
 	f.closed = true
 	return f.resource.Close()
 }
@@ -82,7 +83,8 @@ func (f *GcsFile) Seek(newOffset int64, whence int) (int64, error) {
 	}
 	log.Printf("WARNING; Seek behavior triggerd, highly inefficent. Offset before seek is at %d\n", f.fhoffset)
 
-	//Force the reader/writers to be reopened (at correct offset)
+	// Force the reader/writers to be reopened (at correct offset)
+	// by closing ios. Next write or read will open reader at correct offset
 	if err := f.Sync(); err != nil {
 		return 0, fmt.Errorf("error syncing file: %v", err)
 	}
