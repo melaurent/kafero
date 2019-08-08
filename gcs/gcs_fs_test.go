@@ -17,15 +17,15 @@ func TestGcsFs_Create(t *testing.T) {
 		t.Fatalf("error creating client")
 	}
 	fs := NewGcsFs(ctx, client, "patrick-data", "/")
+
 	/*
-	_, err = fs.Create("dede/dedede/odkoadoadwak.tick")
-	if err != nil {
-		t.Fatalf("error creating file: %v", err)
-	}
+		_, err = fs.Create("dede/dedede/odkoadoadwak.tick")
+		if err != nil {
+			t.Fatalf("error creating file: %v", err)
+		}
+	*/
 
-
-	 */
-	err = kafero.Walk(fs, "data/", func(path string, info os.FileInfo, err error) error {
+	err = kafero.Walk(fs, "dede", func(path string, info os.FileInfo, err error) error {
 		if info != nil && !info.IsDir() {
 			fmt.Println("walk", path)
 		}

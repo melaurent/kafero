@@ -26,20 +26,22 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+// TODO walk returns folder file ???
+
 // GcsFs is a Fs implementation that uses functions provided by google cloud storage
 type GcsFs struct {
-	ctx           context.Context
-	client        *storage.Client
-	bucket        *storage.BucketHandle
-	separator     string
+	ctx       context.Context
+	client    *storage.Client
+	bucket    *storage.BucketHandle
+	separator string
 }
 
 func NewGcsFs(ctx context.Context, cl *storage.Client, bucket string, folderSep string) *GcsFs {
 	return &GcsFs{
-		ctx:           ctx,
-		client:        cl,
-		bucket:        cl.Bucket(bucket),
-		separator:     folderSep,
+		ctx:       ctx,
+		client:    cl,
+		bucket:    cl.Bucket(bucket),
+		separator: folderSep,
 	}
 }
 
@@ -62,7 +64,7 @@ func (fs *GcsFs) getObj(name string) *storage.ObjectHandle {
 func (fs *GcsFs) Name() string { return "GcsFs" }
 
 func (fs *GcsFs) Create(name string) (kafero.File, error) {
-	return fs.OpenFile(name, os.O_RDWR | os.O_CREATE, 0)
+	return fs.OpenFile(name, os.O_RDWR|os.O_CREATE, 0)
 }
 
 func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
@@ -103,7 +105,7 @@ func (fs *GcsFs) Open(name string) (kafero.File, error) {
 
 func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File, error) {
 	// If create flag, ensure directory exists
-	if flag & os.O_CREATE != 0 {
+	if flag&os.O_CREATE != 0 {
 		dir := filepath.Dir(name)
 		if _, err := fs.Stat(dir); err == os.ErrNotExist {
 			if err := fs.MkdirAll(dir, 0); err != nil {
@@ -112,27 +114,12 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File,
 		}
 	}
 
-	file := NewGcsFile(fs.ctx, fs, fs.getObj(name), flag, perm, name)
-	_, err := file.Stat()
+	file, err := NewGcsFile(fs, fs.ctx, fs.getObj(name), flag, perm, name)
 	if err != nil {
-		if err == os.ErrNotExist {
-			if flag & os.O_CREATE != 0 {
-				// Create file
-				if _, err := file.WriteString(""); err != nil {
-					return nil, fmt.Errorf("error creating file: %v", err)
-				}
-			} else {
-				return nil, fmt.Errorf("file does not exists")
-			}
-		} else {
-			return nil, fmt.Errorf("error getting file stat: %v", err)
-		}
+		return nil, fmt.Errorf("error opening gcs file: %v", err)
 	}
-	bFile, err := kafero.NewBufferFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("error creating buffer file: %v", err)
-	}
-	return bFile, nil
+
+	return file, nil
 }
 
 func (fs *GcsFs) Remove(name string) error {
@@ -146,8 +133,8 @@ func (fs *GcsFs) Remove(name string) error {
 func (fs *GcsFs) RemoveAll(path string) error {
 	it := fs.bucket.Objects(fs.ctx, &storage.Query{
 		Delimiter: fs.separator,
-		Prefix: path,
-		Versions: false})
+		Prefix:    path,
+		Versions:  false})
 	for {
 		objAttrs, err := it.Next()
 		if err == iterator.Done {
@@ -190,5 +177,5 @@ func (fs *GcsFs) Chmod(name string, mode os.FileMode) error {
 }
 
 func (fs *GcsFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	return 	fmt.Errorf("chtimes not implemented: Create, Delete, Updated times are read only fields in GCS and set implicitly")
+	return fmt.Errorf("chtimes not implemented: Create, Delete, Updated times are read only fields in GCS and set implicitly")
 }

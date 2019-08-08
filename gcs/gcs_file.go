@@ -17,95 +17,124 @@ import (
 	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
+	"github.com/dsnet/golib/memfile"
 	"io"
-	"log"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"google.golang.org/api/iterator"
 )
 
 // GcsFs is the Afero version adapted for GCS
 type GcsFile struct {
+	fs        *GcsFs
+	ctx       context.Context
 	openFlags int
 	fileMode  os.FileMode
 	fhoffset  int64 //File handle specific offset
 	closed    bool
 	ReadDirIt *storage.ObjectIterator
-	resource  *gcsFileResource
+	memFile   *memfile.File
+	obj       *storage.ObjectHandle
+	name      string
+	isDir     bool
+	dirty     bool
 }
 
 func NewGcsFile(
-	ctx context.Context,
 	fs *GcsFs,
+	ctx context.Context,
 	obj *storage.ObjectHandle,
 	openFlags int,
 	fileMode os.FileMode,
 	name string,
-) *GcsFile {
-	return &GcsFile{
+) (*GcsFile, error) {
+	file := &GcsFile{
+		fs:        fs,
+		ctx:       ctx,
 		openFlags: openFlags,
 		fileMode:  fileMode,
 		fhoffset:  0,
 		closed:    false,
 		ReadDirIt: nil,
-		resource: &gcsFileResource{
-			ctx: ctx,
-			fs:  fs,
-
-			obj:  obj,
-			name: name,
-
-			currentGcsSize: 0,
-
-			offset: 0,
-			reader: nil,
-			writer: nil,
-		},
+		obj:       obj,
+		name:      name,
+		memFile:   memfile.New(nil),
+		isDir:     false,
+		dirty:     false,
 	}
+
+	attr, err := obj.Attrs(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			if openFlags&os.O_CREATE != 0 {
+				// Create file
+				writer := obj.NewWriter(ctx)
+				if _, err := writer.Write([]byte("")); err != nil {
+					return nil, fmt.Errorf("error writing to file: %v", err)
+				}
+				if err := writer.Close(); err != nil {
+					return nil, fmt.Errorf("error closing writer: %v", err)
+				}
+			} else {
+				return nil, fmt.Errorf("file does not exists")
+			}
+		} else {
+			return nil, fmt.Errorf("error getting file reader: %v", err)
+		}
+	} else {
+		if attr.Metadata["virtual_folder"] == "y" {
+			file.isDir = true
+			// no need to read file to memory, it's an empty virtual dir
+			return file, nil
+		}
+	}
+
+	// Now we should be able to get the reader
+	reader, err := obj.NewReader(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error getting file reader: %v", err)
+	}
+
+	if openFlags&os.O_TRUNC == 0 {
+		// if truncating the file, let memFile be empty
+		if _, err := io.Copy(file.memFile, reader); err != nil {
+			return nil, fmt.Errorf("error reading file: %v", err)
+		}
+		if err := reader.Close(); err != nil {
+			return nil, fmt.Errorf("error closing reader: %v", err)
+		}
+		fmt.Println(len(file.memFile.Bytes()))
+		if openFlags&os.O_APPEND == 0 {
+			if _, err := file.memFile.Seek(0, 0); err != nil {
+				return nil, fmt.Errorf("error seeking to begining of file: %v", err)
+			}
+		}
+	}
+
+	return file, nil
 }
 
 func (f *GcsFile) Close() error {
-	// There shouldn't be a case where both are open at the same time
-	// but the check is omitted at this time.
-	fmt.Println("CLOSING GCS FILE")
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("error syncing file: %v", err)
+	}
 	f.closed = true
-	return f.resource.Close()
+	return nil
 }
 
 func (f *GcsFile) Seek(newOffset int64, whence int) (int64, error) {
 	if f.closed {
 		return 0, ErrFileClosed
 	}
-	//Since this is an expensive operation; let's make sure we need it
-	if (whence == 0 && newOffset == f.fhoffset) || (whence == 1 && newOffset == 0) {
-		return f.fhoffset, nil
-	}
-	log.Printf("WARNING; Seek behavior triggerd, highly inefficent. Offset before seek is at %d\n", f.fhoffset)
-
-	// Force the reader/writers to be reopened (at correct offset)
-	// by closing ios. Next write or read will open reader at correct offset
-	if err := f.Sync(); err != nil {
-		return 0, fmt.Errorf("error syncing file: %v", err)
-	}
-	stat, err := f.Stat()
-	if err != nil {
-		return 0, fmt.Errorf("error getting file stat: %v", err)
-	}
-
-	switch whence {
-	case 0:
-		f.fhoffset = newOffset
-	case 1:
-		f.fhoffset += newOffset
-	case 2:
-		f.fhoffset = stat.Size() + newOffset
-	}
-	return f.fhoffset, nil
+	return f.memFile.Seek(newOffset, whence)
 }
 
 func (f *GcsFile) Read(p []byte) (n int, err error) {
-	return f.ReadAt(p, f.fhoffset)
+	return f.memFile.Read(p)
 }
 
 func (f *GcsFile) ReadAt(p []byte, off int64) (n int, err error) {
@@ -113,42 +142,40 @@ func (f *GcsFile) ReadAt(p []byte, off int64) (n int, err error) {
 		return 0, ErrFileClosed
 	}
 
-	read, err := f.resource.ReadAt(p, off)
-	f.fhoffset += int64(read)
-	return read, err
+	return f.memFile.ReadAt(p, off)
 }
 
 func (f *GcsFile) Write(p []byte) (n int, err error) {
-	return f.WriteAt(p, f.fhoffset)
+	if f.closed {
+		return 0, ErrFileClosed
+	}
+	f.dirty = true
+
+	return f.memFile.Write(p)
 }
 
 func (f *GcsFile) WriteAt(b []byte, off int64) (n int, err error) {
 	if f.closed {
 		return 0, ErrFileClosed
 	}
+	f.dirty = true
 
-	if f.openFlags & os.O_RDONLY != 0 {
-		return 0, fmt.Errorf("file is opend as read only")
-	}
-
-	written, err := f.resource.WriteAt(b, off)
-	f.fhoffset += int64(written)
-	return written, err
+	return f.memFile.WriteAt(b, off)
 }
 
 func (f *GcsFile) Name() string {
-	return f.resource.name
+	return f.name
 }
 
 func (f *GcsFile) readdir(count int) ([]*fileInfo, error) {
+	fmt.Println("READING DIR FOR", f.name)
 	if err := f.Sync(); err != nil {
 		return nil, fmt.Errorf("error syncing file")
 	}
-	//normSeparators should maybe not be here; adds
-	path := f.resource.fs.ensureTrailingSeparator(normSeparators(f.Name(), f.resource.fs.separator))
+	path := f.fs.ensureTrailingSeparator(normSeparators(f.Name(), f.fs.separator))
 	if f.ReadDirIt == nil {
-		f.ReadDirIt = f.resource.fs.bucket.Objects(
-			f.resource.ctx, &storage.Query{
+		f.ReadDirIt = f.fs.bucket.Objects(
+			f.ctx, &storage.Query{
 				Delimiter: "/",
 				Prefix:    path,
 				Versions:  false})
@@ -166,7 +193,7 @@ func (f *GcsFile) readdir(count int) ([]*fileInfo, error) {
 			return res, err
 		}
 
-		tmp := fileInfo{object, f.resource.fs}
+		tmp := fileInfo{object, f.fs}
 		// Since we create "virtual folders which are empty objects they can sometimes be returned twice
 		// when we do a query (As the query will also return GCS version of "virtual folders" but they only
 		// have a .Prefix, and not .Name)
@@ -215,31 +242,53 @@ func (f *GcsFile) Stat() (os.FileInfo, error) {
 	if err := f.Sync(); err != nil {
 		return nil, fmt.Errorf("error syncing file")
 	}
-	objAttrs, err := f.resource.obj.Attrs(f.resource.ctx)
+	objAttrs, err := f.obj.Attrs(f.ctx)
 	if err != nil {
 		if err == storage.ErrObjectNotExist {
 			return nil, os.ErrNotExist //works with os.IsNotExist check
 		}
 		return nil, fmt.Errorf("error getting resource attributes: %v", err)
 	}
-	return &fileInfo{objAttrs, f.resource.fs}, nil
+	return &fileInfo{objAttrs, f.fs}, nil
 }
 
 func (f *GcsFile) Sync() error {
-	return f.resource.maybeCloseIo()
+	if f.isDir {
+		return nil
+	}
+	if !f.dirty {
+		return nil
+	}
+	prevOff, err := f.memFile.Seek(0, 1)
+	if err != nil {
+		return fmt.Errorf("error relative seeking memfile: %v", err)
+	}
+	if _, err := f.memFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("error seeking to beginning of file: %v", err)
+	}
+	writer := f.obj.NewWriter(f.ctx)
+	if _, err := writer.Write(f.memFile.Bytes()); err != nil {
+		return fmt.Errorf("error copying buffer to gcs file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("error closing writer: %v", err)
+	}
+	if _, err := f.memFile.Seek(prevOff, 0); err != nil {
+		return fmt.Errorf("error seeking memfile: %v", err)
+	}
+	f.dirty = false
+	return nil
 }
 
 func (f *GcsFile) Truncate(wantedSize int64) error {
 	if f.closed {
 		return ErrFileClosed
 	}
-	if f.openFlags & os.O_RDONLY != 0 {
+	if f.openFlags&os.O_RDONLY != 0 {
 		return fmt.Errorf("file is read only")
 	}
-	if f.openFlags & os.O_TRUNC == 0 {
-		return fmt.Errorf("file not open in truncate mode")
-	}
-	return f.resource.Truncate(wantedSize)
+	f.dirty = true
+	return f.memFile.Truncate(wantedSize)
 }
 
 func (f *GcsFile) WriteString(s string) (ret int, err error) {
@@ -258,3 +307,51 @@ func (f *GcsFile) Munmap() error {
 	return fmt.Errorf("mmap not supported")
 }
 
+type fileInfo struct {
+	objAtt *storage.ObjectAttrs
+	fs     *GcsFs
+}
+
+func (fi *fileInfo) name() string {
+	return fi.objAtt.Prefix + fi.objAtt.Name
+}
+
+func (fi *fileInfo) Name() string {
+	return filepath.Base(fi.name())
+}
+
+func (fi *fileInfo) Size() int64 {
+	return fi.objAtt.Size
+}
+func (fi *fileInfo) Mode() os.FileMode {
+	if fi.IsDir() {
+		return 0755
+	}
+	return 0664
+}
+
+func (fi *fileInfo) ModTime() time.Time {
+	return fi.objAtt.Updated
+}
+
+func (fi *fileInfo) IsDir() bool {
+	return fi.objAtt.Metadata["virtual_folder"] == "y"
+}
+
+func (fi *fileInfo) Sys() interface{} {
+	return nil
+}
+
+type ByName []*fileInfo
+
+func (a ByName) Len() int {
+	return len(a)
+}
+
+func (a ByName) Swap(i, j int) {
+	a[i].objAtt, a[j].objAtt = a[j].objAtt, a[i].objAtt
+}
+
+func (a ByName) Less(i, j int) bool {
+	return strings.Compare(a[i].Name(), a[j].Name()) == -1
+}
