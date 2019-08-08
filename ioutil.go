@@ -17,6 +17,7 @@ package kafero
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -124,16 +125,15 @@ func (a Afero) WriteFile(filename string, data []byte, perm os.FileMode) error {
 func WriteFile(fs Fs, filename string, data []byte, perm os.FileMode) error {
 	f, err := fs.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
-		return err
+		return fmt.Errorf("error opening file: %v", err)
 	}
-	n, err := f.Write(data)
-	if err == nil && n < len(data) {
-		err = io.ErrShortWrite
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("error writing to file: %v", err)
 	}
-	if err1 := f.Close(); err == nil {
-		err = err1
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("error closing file: %v", err)
 	}
-	return err
+	return nil
 }
 
 // Random number state.
