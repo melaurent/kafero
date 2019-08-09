@@ -33,8 +33,6 @@ type GcsFile struct {
 	fs        *GcsFs
 	ctx       context.Context
 	openFlags int
-	fileMode  os.FileMode
-	fhoffset  int64 //File handle specific offset
 	closed    bool
 	ReadDirIt *storage.ObjectIterator
 	memFile   *memfile.File
@@ -49,15 +47,12 @@ func NewGcsFile(
 	ctx context.Context,
 	obj *storage.ObjectHandle,
 	openFlags int,
-	fileMode os.FileMode,
 	name string,
 ) (*GcsFile, error) {
 	file := &GcsFile{
 		fs:        fs,
 		ctx:       ctx,
 		openFlags: openFlags,
-		fileMode:  fileMode,
-		fhoffset:  0,
 		closed:    false,
 		ReadDirIt: nil,
 		obj:       obj,
@@ -168,7 +163,6 @@ func (f *GcsFile) Name() string {
 }
 
 func (f *GcsFile) readdir(count int) ([]*fileInfo, error) {
-	fmt.Println("READING DIR FOR", f.name)
 	if err := f.Sync(); err != nil {
 		return nil, fmt.Errorf("error syncing file")
 	}
