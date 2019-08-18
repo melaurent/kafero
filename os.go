@@ -175,7 +175,12 @@ func (f *OsFile) CanMmap() bool {
 
 func (f *OsFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
 	fd := f.f.Fd()
-	return syscall.Mmap(int(fd), offset, length, prot, flags)
+	b, err := syscall.Mmap(int(fd), offset, length, prot, flags)
+	if err != nil {
+		return nil, fmt.Errorf("error mmaping: %v", err)
+	}
+	f.mmap = b
+	return b, nil
 }
 
 func (f *OsFile) Munmap() error {
@@ -185,6 +190,6 @@ func (f *OsFile) Munmap() error {
 	if err := syscall.Munmap(f.mmap); err != nil {
 		return fmt.Errorf("error unmapping file: %v", err)
 	}
+	f.mmap = nil
 	return nil
 }
-
