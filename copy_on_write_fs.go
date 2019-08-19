@@ -178,6 +178,21 @@ func (u *CopyOnWriteFs) OpenFile(name string, flag int, perm os.FileMode) (File,
 
 	if flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
 		if b {
+			if flag&os.O_CREATE != 0 {
+				exists, err := Exists(u.base, name)
+				if err != nil {
+					return nil, fmt.Errorf("error determining if file exists: %v", err)
+				}
+				if !exists {
+					f, err := u.base.Create(name)
+					if err != nil {
+						return nil, fmt.Errorf("error creating base file: %v", err)
+					}
+					if err := f.Close(); err != nil {
+						return nil, fmt.Errorf("error closing base file: %v", err)
+					}
+				}
+			}
 			if err = u.copyToLayer(name); err != nil {
 				return nil, err
 			}

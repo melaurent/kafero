@@ -33,6 +33,7 @@ func (f *UnionFile) Close() error {
 	// first close base, so we have a newer timestamp in the overlay. If we'd close
 	// the overlay first, we'd get a cacheStale the next time we access this file
 	// -> cache would be useless ;-)
+
 	if f.Base != nil {
 		if err := f.Base.Close(); err != nil {
 			return fmt.Errorf("error closing base file: %v", err)
@@ -298,7 +299,11 @@ func (f *UnionFile) Munmap() error {
 func copyToLayer(base Fs, layer Fs, name string) error {
 	bfh, err := base.Open(name)
 	if err != nil {
-		return err
+		if err == os.ErrNotExist {
+			return err
+		} else {
+			return fmt.Errorf("error opening base file: %v", err)
+		}
 	}
 
 	// First make sure the directory exists
@@ -344,4 +349,3 @@ func copyToLayer(base Fs, layer Fs, name string) error {
 	}
 	return layer.Chtimes(name, bfi.ModTime(), bfi.ModTime())
 }
-

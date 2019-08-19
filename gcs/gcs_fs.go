@@ -116,7 +116,11 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File,
 
 	file, err := NewGcsFile(fs, fs.ctx, fs.getObj(name), flag, name)
 	if err != nil {
-		return nil, fmt.Errorf("error opening gcs file: %v", err)
+		if err == os.ErrNotExist {
+			return nil, os.ErrNotExist
+		} else {
+			return nil, fmt.Errorf("error opening gcs file: %v", err)
+		}
 	}
 
 	return file, nil

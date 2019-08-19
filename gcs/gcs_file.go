@@ -75,7 +75,7 @@ func NewGcsFile(
 					return nil, fmt.Errorf("error closing writer: %v", err)
 				}
 			} else {
-				return nil, fmt.Errorf("file does not exists")
+				return nil, os.ErrNotExist
 			}
 		} else {
 			return nil, fmt.Errorf("error getting file reader: %v", err)
@@ -102,7 +102,6 @@ func NewGcsFile(
 		if err := reader.Close(); err != nil {
 			return nil, fmt.Errorf("error closing reader: %v", err)
 		}
-		fmt.Println(len(file.memFile.Bytes()))
 		if openFlags&os.O_APPEND == 0 {
 			if _, err := file.memFile.Seek(0, 0); err != nil {
 				return nil, fmt.Errorf("error seeking to begining of file: %v", err)
