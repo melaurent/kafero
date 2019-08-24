@@ -285,15 +285,26 @@ func (f *UnionFile) WriteString(s string) (n int, err error) {
 }
 
 func (f *UnionFile) CanMmap() bool {
+	if f.Layer != nil {
+		return f.Layer.CanMmap()
+	}
 	return false
 }
 
 func (f *UnionFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
-	return nil, fmt.Errorf("mmap not supported")
+	if f.Layer == nil {
+		return nil, fmt.Errorf("mmap not supported")
+	} else {
+		return f.Layer.Mmap(offset, length, prot, flags)
+	}
 }
 
 func (f *UnionFile) Munmap() error {
-	return fmt.Errorf("mmap not supported")
+	if f.Layer == nil {
+		return fmt.Errorf("mmap not supported")
+	} else {
+		return f.Layer.Munmap()
+	}
 }
 
 func copyToLayer(base Fs, layer Fs, name string) error {
