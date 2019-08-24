@@ -289,15 +289,17 @@ func (f *GcsFile) WriteString(s string) (ret int, err error) {
 }
 
 func (f *GcsFile) CanMmap() bool {
-	return true
+	return false
 }
 
 func (f *GcsFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
-	return f.memFile.Bytes(), nil
+	return nil, fmt.Errorf("mmap not supported")
+	// Todo offset and length and look at prot and flags
+	//return f.memFile.Bytes(), nil
 }
 
 func (f *GcsFile) Munmap() error {
-	return nil
+	return fmt.Errorf("mmap not supported")
 }
 
 type fileInfo struct {
