@@ -54,6 +54,8 @@ func tmpFile(fs Fs) File {
 	return x
 }
 
+// TODO test "exotic" flags behavior with all the different file systems
+
 //Read with length 0 should not return EOF.
 func TestRead0(t *testing.T) {
 	for _, fs := range Fss {
