@@ -81,6 +81,10 @@ func NewGcsFile(
 			return nil, fmt.Errorf("error getting file reader: %v", err)
 		}
 	} else {
+		// If create exclusive and file exists, error
+		if openFlags&os.O_CREATE != 0 && openFlags&os.O_EXCL != 0 {
+			return nil, os.ErrExist
+		}
 		if attr.Metadata["virtual_folder"] == "y" {
 			file.isDir = true
 			// no need to read file to memory, it's an empty virtual dir

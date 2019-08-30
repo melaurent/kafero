@@ -15,6 +15,7 @@ package kafero
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -212,18 +213,22 @@ func (m *MemMapFs) lockfreeOpen(name string) (*mem.FileData, error) {
 func (m *MemMapFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	chmod := false
 	file, err := m.openWrite(name)
-	if os.IsNotExist(err) && (flag&os.O_CREATE > 0) {
+	if os.IsNotExist(err) && (flag&os.O_CREATE != 0) {
 		file, err = m.Create(name)
 		chmod = true
 	}
 	if err != nil {
 		return nil, err
 	}
+	if (flag&os.O_CREATE != 0) && (flag&os.O_EXCL != 0) {
+		file.Close()
+		return nil, os.ErrExist
+	}
 	if flag == os.O_RDONLY {
 		file = mem.NewReadOnlyFileHandle(file.(*mem.File).Data())
 	}
 	if flag&os.O_APPEND > 0 {
-		_, err = file.Seek(0, os.SEEK_END)
+		_, err = file.Seek(0, io.SeekEnd)
 		if err != nil {
 			file.Close()
 			return nil, err
@@ -357,7 +362,6 @@ func (m *MemMapFs) List() {
 		fmt.Println(x.Name(), y.Size())
 	}
 }
-
 
 // func debugMemMapList(fs Fs) {
 // 	if x, ok := fs.(*MemMapFs); ok {

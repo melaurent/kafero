@@ -179,6 +179,8 @@ func (u *CopyOnWriteFs) OpenFile(name string, flag int, perm os.FileMode) (File,
 	if flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
 		if b {
 			if flag&os.O_CREATE != 0 {
+				// If not in overlay, and not in base, and create flag on,
+				// then create in base
 				exists, err := Exists(u.base, name)
 				if err != nil {
 					return nil, fmt.Errorf("error determining if file exists: %v", err)
@@ -221,6 +223,7 @@ func (u *CopyOnWriteFs) OpenFile(name string, flag int, perm os.FileMode) (File,
 
 		return nil, &os.PathError{Op: "open", Path: name, Err: syscall.ENOTDIR} // ...or os.ErrNotExist?
 	}
+	// If readonly mode, open base file
 	if b {
 		return u.base.OpenFile(name, flag, perm)
 	}
