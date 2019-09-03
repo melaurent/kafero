@@ -1,7 +1,6 @@
 package kafero
 
 import (
-	"fmt"
 	"os"
 	"syscall"
 	"time"
