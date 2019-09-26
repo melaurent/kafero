@@ -2,36 +2,29 @@ package kafero
 
 import (
 	"fmt"
-	"github.com/dsnet/golib/memfile"
 	"io"
 	"os"
-	"time"
 )
 
 type BufferFile struct {
+	LayerFs Fs
 	Base    File
-	Buffer  *memfile.File
-	modTime time.Time
-}
-
-func NewBufferFile(base File) (*BufferFile, error) {
-	bytes, err := ReadAll(base)
-	if err != nil {
-		return nil, fmt.Errorf("error reading base file: %v", err)
-	}
-	// TODO modtime
-	return &BufferFile{
-		Base:    base,
-		Buffer:  memfile.New(bytes),
-		modTime: time.Now(),
-	}, nil
+	Buffer  File
 }
 
 func (f *BufferFile) Close() error {
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("error syncing to base file: %v", err)
 	}
-
+	if err := f.Buffer.Close(); err != nil {
+		return fmt.Errorf("error closing buffer file: %v", err)
+	}
+	if err := f.Base.Close(); err != nil {
+		return fmt.Errorf("error closing base file: %v", err)
+	}
+	if err := f.LayerFs.Remove(f.Buffer.Name()); err != nil {
+		return fmt.Errorf("error deleting buffer file: %v", err)
+	}
 	return nil
 }
 
@@ -52,7 +45,6 @@ func (f *BufferFile) Write(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	} else {
-		f.modTime = time.Now()
 		return n, nil
 	}
 }
@@ -62,7 +54,6 @@ func (f *BufferFile) WriteAt(b []byte, o int64) (int, error) {
 	if err != nil {
 		return 0, err
 	} else {
-		f.modTime = time.Now()
 		return n, nil
 	}
 }
@@ -80,26 +71,25 @@ func (f *BufferFile) Readdirnames(c int) ([]string, error) {
 }
 
 func (f *BufferFile) Stat() (os.FileInfo, error) {
-	// TODO
-	baseInfo, err := f.Base.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("error reading base file info: %v", err)
-	}
-
-	info := &BufferFileInfo{
-		baseInfo: baseInfo,
-		size:     int64(len(f.Buffer.Bytes())),
-		modTime:  f.modTime,
-	}
-	return info, nil
+	return f.Buffer.Stat()
 }
 
 func (f *BufferFile) Sync() error {
 	if _, err := f.Base.Seek(0, 0); err != nil {
 		return fmt.Errorf("error seeking base file to start: %v", err)
 	}
-	if _, err := io.Copy(f.Buffer, f.Base); err != nil {
+	idx, err := f.Buffer.Seek(0, 1)
+	if err != nil {
+		return fmt.Errorf("error seeking buffer file: %v", err)
+	}
+	if _, err := f.Buffer.Seek(0, 0); err != nil {
+		return fmt.Errorf("error seeking buffer file to start: %v", err)
+	}
+	if _, err := io.Copy(f.Base, f.Buffer); err != nil {
 		return fmt.Errorf("error copying buffer to base file: %v", err)
+	}
+	if _, err := f.Buffer.Seek(idx, 0); err != nil {
+		return fmt.Errorf("error seeking buffer file to start: %v", err)
 	}
 	if err := f.Base.Sync(); err != nil {
 		return fmt.Errorf("error syncing base file: %v", err)
@@ -116,49 +106,13 @@ func (f *BufferFile) WriteString(s string) (int, error) {
 }
 
 func (f *BufferFile) CanMmap() bool {
-	return true
+	return f.Buffer.CanMmap()
 }
 
 func (f *BufferFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
-	// TODO check if base is readonly
-	return f.Buffer.Bytes(), nil
+	return f.Buffer.Mmap(offset, length, prot, flags)
 }
 
 func (f *BufferFile) Munmap() error {
-	return nil
-}
-
-type BufferFileInfo struct {
-	baseInfo os.FileInfo
-	size     int64
-	modTime  time.Time
-}
-
-// Implements os.FileInfo
-func (fi *BufferFileInfo) Name() string {
-	return fi.baseInfo.Name()
-}
-
-func (fi *BufferFileInfo) Mode() os.FileMode {
-	return fi.baseInfo.Mode()
-}
-
-func (fi *BufferFileInfo) ModTime() time.Time {
-	return fi.modTime
-}
-
-func (fi *BufferFileInfo) IsDir() bool {
-	return fi.baseInfo.IsDir()
-}
-
-func (fi *BufferFileInfo) Sys() interface{} {
-	return nil
-}
-
-func (fi *BufferFileInfo) Size() int64 {
-	if fi.IsDir() {
-		return fi.baseInfo.Size()
-	} else {
-		return fi.size
-	}
+	return f.Buffer.Munmap()
 }
