@@ -158,6 +158,7 @@ func (b *BasePathFs) Create(name string) (f File, err error) {
 	if name, err = b.RealPath(name); err != nil {
 		return nil, &os.PathError{Op: "create", Path: name, Err: err}
 	}
+
 	sourcef, err := b.source.Create(name)
 	if err != nil {
 		return nil, err

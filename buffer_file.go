@@ -22,9 +22,7 @@ func (f *BufferFile) Close() error {
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
 	}
-	if err := f.LayerFs.Remove(f.Buffer.Name()); err != nil {
-		return fmt.Errorf("error deleting buffer file: %v", err)
-	}
+	_ = f.LayerFs.Remove(f.Buffer.Name())
 	return nil
 }
 
