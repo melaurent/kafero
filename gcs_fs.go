@@ -11,12 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gcs
+package kafero
 
 import (
 	"context"
 	"fmt"
-	"github.com/melaurent/kafero"
+	"github.com/melaurent/kafero/gcs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,17 +57,26 @@ func (fs *GcsFs) ensureTrailingSeparator(s string) string {
 	return s
 }
 
+func (fs *GcsFs) trimRoot(s string) string {
+	if len(s) > 0 && string(s[0]) == fs.separator {
+		return s[1:]
+	} else {
+		return s
+	}
+}
+
 func (fs *GcsFs) getObj(name string) *storage.ObjectHandle {
 	return fs.bucket.Object(normSeparators(name, fs.separator)) //normalize paths for ll oses
 }
 
 func (fs *GcsFs) Name() string { return "GcsFs" }
 
-func (fs *GcsFs) Create(name string) (kafero.File, error) {
+func (fs *GcsFs) Create(name string) (File, error) {
 	return fs.OpenFile(name, os.O_RDWR|os.O_CREATE, 0)
 }
 
 func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
+	name = fs.trimRoot(name)
 	name = filepath.Clean(normSeparators(name, fs.separator))
 	obj := fs.getObj(name)
 	w := obj.NewWriter(fs.ctx)
@@ -82,6 +91,8 @@ func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
 }
 
 func (fs *GcsFs) MkdirAll(path string, perm os.FileMode) error {
+	path = fs.trimRoot(path)
+
 	root := ""
 	folders := strings.Split(normSeparators(path, fs.separator), fs.separator)
 	for _, f := range folders {
@@ -99,11 +110,13 @@ func (fs *GcsFs) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
-func (fs *GcsFs) Open(name string) (kafero.File, error) {
+func (fs *GcsFs) Open(name string) (File, error) {
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
-func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File, error) {
+func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
+	// No distinction between root and cwd !!TODO ?
+	name = fs.trimRoot(name)
 	// If create flag, ensure directory exists
 	if flag&os.O_CREATE != 0 {
 		dir := filepath.Dir(name)
@@ -114,7 +127,7 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File,
 		}
 	}
 
-	file, err := NewGcsFile(fs, fs.ctx, fs.getObj(name), flag, name)
+	file, err := gcs.NewGcsFile(fs.ctx, fs.bucket, fs.getObj(name), fs.separator, flag, name)
 	if err != nil {
 		// Don't decorate error, as implementations depend on knowing
 		// if err is ErrExists or ErrNotExists etc..
@@ -125,6 +138,7 @@ func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (kafero.File,
 }
 
 func (fs *GcsFs) Remove(name string) error {
+	name = fs.trimRoot(name)
 	obj := fs.getObj(name)
 	if _, err := fs.Stat(name); err != nil {
 		return err
@@ -133,6 +147,9 @@ func (fs *GcsFs) Remove(name string) error {
 }
 
 func (fs *GcsFs) RemoveAll(path string) error {
+	path = fs.trimRoot(path)
+	path = fs.ensureTrailingSeparator(path)
+
 	it := fs.bucket.Objects(fs.ctx, &storage.Query{
 		Delimiter: fs.separator,
 		Prefix:    path,
@@ -145,14 +162,25 @@ func (fs *GcsFs) RemoveAll(path string) error {
 		if err != nil {
 			return fmt.Errorf("error iterating objects: %v", err)
 		}
-		if err := fs.Remove(objAttrs.Name); err != nil {
-			return fmt.Errorf("error removing object: %v", err)
+		if objAttrs.Name != "" {
+			if err := fs.Remove(objAttrs.Name); err != nil {
+				return err
+			}
+		} else if objAttrs.Prefix != "" {
+			if err := fs.RemoveAll(objAttrs.Prefix); err != nil {
+				return err
+			}
 		}
 	}
+
+	// TODO delete the folder file
 	return nil
 }
 
 func (fs *GcsFs) Rename(oldname, newname string) error {
+	oldname = fs.trimRoot(oldname)
+	newname = fs.trimRoot(newname)
+
 	src := fs.bucket.Object(oldname)
 	dst := fs.bucket.Object(newname)
 
@@ -163,6 +191,8 @@ func (fs *GcsFs) Rename(oldname, newname string) error {
 }
 
 func (fs *GcsFs) Stat(name string) (os.FileInfo, error) {
+	name = fs.trimRoot(name)
+
 	obj := fs.getObj(name)
 	objAttrs, err := obj.Attrs(fs.ctx)
 	if err != nil {
@@ -171,7 +201,7 @@ func (fs *GcsFs) Stat(name string) (os.FileInfo, error) {
 		}
 		return nil, err
 	}
-	return &fileInfo{objAttrs, fs}, nil
+	return &gcs.FileInfo{objAttrs}, nil
 }
 
 func (fs *GcsFs) Chmod(name string, mode os.FileMode) error {

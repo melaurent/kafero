@@ -28,7 +28,8 @@ import (
 )
 
 var testName = "test.txt"
-var Fss = []Fs{&MemMapFs{}, &OsFs{}}
+var gcsFs, _ = NewTestGcsFs()
+var Fss = []Fs{&MemMapFs{}, &OsFs{}, gcsFs}
 
 var testRegistry map[Fs][]string = make(map[Fs][]string)
 
@@ -46,7 +47,7 @@ func tmpFile(fs Fs) File {
 	x, err := TempFile(fs, "", "afero")
 
 	if err != nil {
-		panic(fmt.Sprint("unable to work with temp file", err))
+		panic(fmt.Sprint("unable to work with temp file: ", err))
 	}
 
 	testRegistry[fs] = append(testRegistry[fs], x.Name())
@@ -391,6 +392,8 @@ func TestWriteAt(t *testing.T) {
 		if err != nil || n != 5 {
 			t.Fatalf("WriteAt 7: %d, %v", n, err)
 		}
+
+		f.Sync()
 
 		f2, err := fs.Open(f.Name())
 		if err != nil {
