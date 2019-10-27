@@ -2,6 +2,7 @@ package kafero
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 )
@@ -38,7 +39,7 @@ func (u *BufferFs) Chmod(name string, mode os.FileMode) error {
 	if exists {
 		return u.layer.Chmod(name, mode)
 	} else {
-		return u.layer.Chmod(name, mode)
+		return u.base.Chmod(name, mode)
 	}
 }
 
@@ -105,17 +106,12 @@ func (u *BufferFs) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 		return nil, fmt.Errorf("error opening a buffer file on layer: %v", err)
 	}
 	// Read from base and copy to layer
-	b, err := ReadFile(u.base, name)
-	if err != nil {
+	if _, err := io.Copy(layerFile, baseFile); err != nil {
 		return nil, fmt.Errorf("error reading base file content: %v", err)
-	}
-	if _, err := layerFile.Write(b); err != nil {
-		return nil, fmt.Errorf("error copying base file content to buffer file: %v", err)
 	}
 	if _, err := layerFile.Seek(0, 0); err != nil {
 		return nil, fmt.Errorf("error seeking buffer file: %v", err)
 	}
-
 	return &BufferFile{
 		LayerFs: u.layer,
 		Base:    baseFile,
@@ -133,12 +129,8 @@ func (u *BufferFs) Open(name string) (File, error) {
 		return nil, fmt.Errorf("error opening a buffer file on layer: %v", err)
 	}
 	// Read from base and copy to layer
-	b, err := ReadFile(u.base, name)
-	if err != nil {
+	if _, err := io.Copy(layerFile, baseFile); err != nil {
 		return nil, fmt.Errorf("error reading base file content: %v", err)
-	}
-	if _, err := layerFile.Write(b); err != nil {
-		return nil, fmt.Errorf("error copying base file content to buffer file: %v", err)
 	}
 	if _, err := layerFile.Seek(0, 0); err != nil {
 		return nil, fmt.Errorf("error seeking buffer file: %v", err)
