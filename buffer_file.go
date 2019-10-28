@@ -10,6 +10,7 @@ type BufferFile struct {
 	LayerFs Fs
 	Base    File
 	Buffer  File
+	Flag    int
 }
 
 func (f *BufferFile) Close() error {
@@ -73,6 +74,9 @@ func (f *BufferFile) Stat() (os.FileInfo, error) {
 }
 
 func (f *BufferFile) Sync() error {
+	if f.Flag == os.O_RDONLY {
+		return nil
+	}
 	if err := f.Base.Truncate(0); err != nil {
 		return fmt.Errorf("error truncating base file: %v", err)
 	}

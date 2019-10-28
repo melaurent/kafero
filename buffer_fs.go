@@ -115,7 +115,9 @@ func (u *BufferFs) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 	return &BufferFile{
 		LayerFs: u.layer,
 		Base:    baseFile,
-		Buffer:  layerFile}, nil
+		Buffer:  layerFile,
+		Flag:    flag,
+	}, nil
 }
 
 func (u *BufferFs) Open(name string) (File, error) {
@@ -139,7 +141,9 @@ func (u *BufferFs) Open(name string) (File, error) {
 	return &BufferFile{
 		LayerFs: u.layer,
 		Base:    baseFile,
-		Buffer:  layerFile}, nil
+		Buffer:  layerFile,
+		Flag:    os.O_RDONLY,
+	}, nil
 }
 
 func (u *BufferFs) Mkdir(name string, perm os.FileMode) error {
