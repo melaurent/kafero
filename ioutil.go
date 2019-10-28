@@ -67,7 +67,6 @@ func ReadFile(fs Fs, filename string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 	// It's a good but not certain bet that FileInfo will tell us exactly how much to
 	// read, so let's try it but be prepared for the answer to be wrong.
 	var n int64
@@ -83,7 +82,16 @@ func ReadFile(fs Fs, filename string) ([]byte, error) {
 	// call will read into its allocated internal buffer cheaply.  If the size was
 	// wrong, we'll either waste some space off the end or reallocate as needed, but
 	// in the overwhelmingly common case we'll get it just right.
-	return readAll(f, n+bytes.MinRead)
+	b, err := readAll(f, n+bytes.MinRead)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := f.Close(); err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
 
 // readAll reads from r until an error or EOF and returns the data it read
