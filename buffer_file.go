@@ -73,6 +73,9 @@ func (f *BufferFile) Stat() (os.FileInfo, error) {
 }
 
 func (f *BufferFile) Sync() error {
+	if err := f.Base.Truncate(0); err != nil {
+		return fmt.Errorf("error truncating base file: %v", err)
+	}
 	if _, err := f.Base.Seek(0, 0); err != nil {
 		return fmt.Errorf("error seeking base file to start: %v", err)
 	}

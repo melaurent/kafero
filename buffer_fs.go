@@ -95,7 +95,7 @@ func (u *BufferFs) RemoveAll(name string) error {
 
 func (u *BufferFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	// Open file in base, open a buffer file in layer, return a buffer file
-	baseFile, err := u.base.OpenFile(name, flag, perm)
+	baseFile, err := u.base.OpenFile(name, os.O_RDWR|os.O_CREATE, perm)
 	if err != nil {
 		return nil, err
 	}
