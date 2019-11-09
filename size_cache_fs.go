@@ -11,6 +11,8 @@ import (
 // last use time (read or edited).
 
 // If the file is on cache, it is up to date ? Not necessarily
+// If you change something on the file, need to change on base and cache
+// even if cache is stale, easier to just do it
 
 type SizeCacheFS struct {
 	base      Fs
@@ -46,10 +48,26 @@ func (u *SizeCacheFS) copyToLayer(name string) error {
 }
 
 func (u *SizeCacheFS) Chtimes(name string, atime, mtime time.Time) error {
+	exists, err := Exists(u.cache, name)
+	if err != nil {
+		return err
+	}
+	// If cache file exists, update to ensure consistency
+	if exists {
+		_ = u.cache.Chtimes(name, atime, mtime)
+	}
 	return u.base.Chtimes(name, atime, mtime)
 }
 
 func (u *SizeCacheFS) Chmod(name string, mode os.FileMode) error {
+	exists, err := Exists(u.cache, name)
+	if err != nil {
+		return err
+	}
+	// If cache file exists, update to ensure consistency
+	if exists {
+		_ = u.cache.Chmod(name, mode)
+	}
 	return u.base.Chmod(name, mode)
 }
 
@@ -58,59 +76,42 @@ func (u *SizeCacheFS) Stat(name string) (os.FileInfo, error) {
 }
 
 func (u *SizeCacheFS) Rename(oldname, newname string) error {
-	st, _, err := u.cacheStatus(oldname)
+	exists, err := Exists(u.cache, oldname)
 	if err != nil {
 		return err
 	}
-	switch st {
-	case cacheLocal:
-	case cacheHit:
-		err = u.base.Rename(oldname, newname)
-	case cacheStale, cacheMiss:
-		if err := u.copyToLayer(oldname); err != nil {
-			return err
-		}
-		err = u.base.Rename(oldname, newname)
+	// If cache file exists, update to ensure consistency
+	if exists {
+		_ = u.cache.Rename(oldname, newname)
 	}
-	if err != nil {
-		return err
-	}
-	return u.layer.Rename(oldname, newname)
+	return u.base.Rename(oldname, newname)
 }
 
-func (u *CacheOnReadFs) Remove(name string) error {
-	st, _, err := u.cacheStatus(name)
+func (u *SizeCacheFS) Remove(name string) error {
+	exists, err := Exists(u.cache, name)
 	if err != nil {
 		return err
 	}
-	switch st {
-	case cacheLocal:
-	case cacheHit, cacheStale, cacheMiss:
-		err = u.base.Remove(name)
+	// If cache file exists, update to ensure consistency
+	if exists {
+		_ = u.cache.Remove(name)
 	}
-	if err != nil {
-		return err
-	}
-	return u.layer.Remove(name)
+	return u.base.Remove(name)
 }
 
-func (u *CacheOnReadFs) RemoveAll(name string) error {
-	st, _, err := u.cacheStatus(name)
+func (u *SizeCacheFS) RemoveAll(name string) error {
+	exists, err := Exists(u.cache, name)
 	if err != nil {
 		return err
 	}
-	switch st {
-	case cacheLocal:
-	case cacheHit, cacheStale, cacheMiss:
-		err = u.base.RemoveAll(name)
+	// If cache file exists, update to ensure consistency
+	if exists {
+		_ = u.cache.RemoveAll(name)
 	}
-	if err != nil {
-		return err
-	}
-	return u.layer.RemoveAll(name)
+	return u.base.RemoveAll(name)
 }
 
-func (u *CacheOnReadFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
+func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	st, _, err := u.cacheStatus(name)
 	if err != nil {
 		return nil, err
@@ -140,7 +141,7 @@ func (u *CacheOnReadFs) OpenFile(name string, flag int, perm os.FileMode) (File,
 	}
 }
 
-func (u *CacheOnReadFs) Open(name string) (File, error) {
+func (u *SizeCacheFS) Open(name string) (File, error) {
 	st, fi, err := u.cacheStatus(name)
 	if err != nil {
 		return nil, err
@@ -184,7 +185,7 @@ func (u *CacheOnReadFs) Open(name string) (File, error) {
 	return &UnionFile{Base: bfile, Layer: lfile}, nil
 }
 
-func (u *CacheOnReadFs) Mkdir(name string, perm os.FileMode) error {
+func (u *SizeCacheFS) Mkdir(name string, perm os.FileMode) error {
 	err := u.base.Mkdir(name, perm)
 	if err != nil {
 		return err
@@ -192,11 +193,11 @@ func (u *CacheOnReadFs) Mkdir(name string, perm os.FileMode) error {
 	return u.layer.MkdirAll(name, perm) // yes, MkdirAll... we cannot assume it exists in the cache
 }
 
-func (u *CacheOnReadFs) Name() string {
-	return "CacheOnReadFs"
+func (u *SizeCacheFS) Name() string {
+	return "SizeCacheFS"
 }
 
-func (u *CacheOnReadFs) MkdirAll(name string, perm os.FileMode) error {
+func (u *SizeCacheFS) MkdirAll(name string, perm os.FileMode) error {
 	err := u.base.MkdirAll(name, perm)
 	if err != nil {
 		return err
@@ -204,7 +205,7 @@ func (u *CacheOnReadFs) MkdirAll(name string, perm os.FileMode) error {
 	return u.layer.MkdirAll(name, perm)
 }
 
-func (u *CacheOnReadFs) Create(name string) (File, error) {
+func (u *SizeCacheFS) Create(name string) (File, error) {
 	bfh, err := u.base.Create(name)
 	if err != nil {
 		return nil, err
