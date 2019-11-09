@@ -130,14 +130,14 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 		if err != nil {
 			return nil, err
 		}
-		lfi, err := u.layer.OpenFile(name, flag, perm)
+		lfi, err := u.cache.OpenFile(name, flag, perm)
 		if err != nil {
 			bfi.Close() // oops, what if O_TRUNC was set and file opening in the layer failed...?
 			return nil, err
 		}
 		return &UnionFile{Base: bfi, Layer: lfi}, nil
 	} else {
-		return u.layer.OpenFile(name, flag, perm)
+		return u.cache.OpenFile(name, flag, perm)
 	}
 }
 
@@ -149,7 +149,7 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 
 	switch st {
 	case cacheLocal:
-		return u.layer.Open(name)
+		return u.cache.Open(name)
 
 	case cacheMiss:
 		bfi, err := u.base.Stat(name)
@@ -162,23 +162,23 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 		if err := u.copyToLayer(name); err != nil {
 			return nil, err
 		}
-		return u.layer.Open(name)
+		return u.cache.Open(name)
 
 	case cacheStale:
 		if !fi.IsDir() {
 			if err := u.copyToLayer(name); err != nil {
 				return nil, err
 			}
-			return u.layer.Open(name)
+			return u.cache.Open(name)
 		}
 	case cacheHit:
 		if !fi.IsDir() {
-			return u.layer.Open(name)
+			return u.cache.Open(name)
 		}
 	}
 	// the dirs from cacheHit, cacheStale fall down here:
 	bfile, _ := u.base.Open(name)
-	lfile, err := u.layer.Open(name)
+	lfile, err := u.cache.Open(name)
 	if err != nil && bfile == nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (u *SizeCacheFS) Mkdir(name string, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	return u.layer.MkdirAll(name, perm) // yes, MkdirAll... we cannot assume it exists in the cache
+	return u.cache.MkdirAll(name, perm) // yes, MkdirAll... we cannot assume it exists in the cache
 }
 
 func (u *SizeCacheFS) Name() string {
@@ -202,7 +202,7 @@ func (u *SizeCacheFS) MkdirAll(name string, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	return u.layer.MkdirAll(name, perm)
+	return u.cache.MkdirAll(name, perm)
 }
 
 func (u *SizeCacheFS) Create(name string) (File, error) {
@@ -210,7 +210,7 @@ func (u *SizeCacheFS) Create(name string) (File, error) {
 	if err != nil {
 		return nil, err
 	}
-	lfh, err := u.layer.Create(name)
+	lfh, err := u.cache.Create(name)
 	if err != nil {
 		// oops, see comment about OS_TRUNC above, should we remove? then we have to
 		// remember if the file did not exist before
