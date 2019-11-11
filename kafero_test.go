@@ -28,8 +28,10 @@ import (
 )
 
 var testName = "test.txt"
-var gcsFs, _ = NewTestGcsFs()
-var Fss = []Fs{&MemMapFs{}, &OsFs{}, gcsFs}
+
+//var gcsFs, _ = NewTestGcsFs()
+var cacheFs = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 0)
+var Fss = []Fs{&MemMapFs{}, &OsFs{}, cacheFs} //gcsFs}
 
 var testRegistry map[Fs][]string = make(map[Fs][]string)
 
