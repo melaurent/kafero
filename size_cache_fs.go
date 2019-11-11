@@ -1,6 +1,7 @@
 package kafero
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 	"time"
@@ -44,6 +45,8 @@ func (u *SizeCacheFS) cacheStatus(name string) (state cacheState, fi os.FileInfo
 }
 
 func (u *SizeCacheFS) copyToLayer(name string) error {
+	// Get size, if size over our limit, evict one file
+
 	return copyToLayer(u.base, u.cache, name)
 }
 
@@ -119,9 +122,15 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 	switch st {
 	case cacheLocal, cacheHit:
 	default:
-		if flag&os.O_CREATE == 0 {
-			if err := u.copyToLayer(name); err != nil {
-				return nil, err
+		if flag&(os.O_TRUNC) == 0 {
+			exists, err := Exists(u.base, name)
+			if err != nil {
+				return nil, fmt.Errorf("error determining if base file exists: %v", err)
+			}
+			if exists {
+				if err := u.copyToLayer(name); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -135,7 +144,11 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 			bfi.Close() // oops, what if O_TRUNC was set and file opening in the layer failed...?
 			return nil, err
 		}
-		return &UnionFile{Base: bfi, Layer: lfi}, nil
+		uf, err := NewUnionFile(bfi, lfi)
+		if err != nil {
+			return nil, fmt.Errorf("error creating union file: %v", err)
+		}
+		return uf, nil
 	} else {
 		return u.cache.OpenFile(name, flag, perm)
 	}
@@ -182,7 +195,11 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 	if err != nil && bfile == nil {
 		return nil, err
 	}
-	return &UnionFile{Base: bfile, Layer: lfile}, nil
+	uf, err := NewUnionFile(bfile, lfile)
+	if err != nil {
+		return nil, fmt.Errorf("error creating union file: %v", err)
+	}
+	return uf, nil
 }
 
 func (u *SizeCacheFS) Mkdir(name string, perm os.FileMode) error {
@@ -217,5 +234,9 @@ func (u *SizeCacheFS) Create(name string) (File, error) {
 		bfh.Close()
 		return nil, err
 	}
-	return &UnionFile{Base: bfh, Layer: lfh}, nil
+	uf, err := NewUnionFile(bfh, lfh)
+	if err != nil {
+		return nil, fmt.Errorf("error creating union file: %v", err)
+	}
+	return uf, nil
 }
