@@ -25,116 +25,91 @@ type UnionFile struct {
 	Base   File
 	Layer  File
 	Merger DirsMerger
-	off    int
+	off    int64
+	dirOff int
 	files  []os.FileInfo
+}
+
+func NewUnionFile(base File, layer File) (File, error) {
+	off, err := layer.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, fmt.Errorf("error determining layer offset: %v", err)
+	}
+	uf := &UnionFile{
+		Base:   base,
+		Layer:  layer,
+		Merger: nil,
+		off:    off,
+		dirOff: 0,
+		files:  nil,
+	}
+
+	return uf, nil
 }
 
 func (f *UnionFile) Close() error {
 	// first close base, so we have a newer timestamp in the overlay. If we'd close
 	// the overlay first, we'd get a cacheStale the next time we access this file
 	// -> cache would be useless ;-)
-
-	if f.Base != nil {
-		if err := f.Base.Close(); err != nil {
-			return fmt.Errorf("error closing base file: %v", err)
-		}
+	if err := f.Base.Close(); err != nil {
+		return fmt.Errorf("error closing base file: %v", err)
 	}
-	if f.Layer != nil {
-		if err := f.Layer.Close(); err != nil {
-			return fmt.Errorf("error closing layer file: %v", err)
-		}
-		return nil
-	} else {
-		return BADFD
+	if err := f.Layer.Close(); err != nil {
+		return fmt.Errorf("error closing layer file: %v", err)
 	}
+	return nil
 }
 
 func (f *UnionFile) Read(s []byte) (int, error) {
-	if f.Layer != nil {
-		n, err := f.Layer.Read(s)
-		if (err == nil || err == io.EOF) && f.Base != nil {
-			// advance the file position also in the base file, the next
-			// call may be a write at this position (or a seek with SEEK_CUR)
-			if _, seekErr := f.Base.Seek(int64(n), io.SeekCurrent); seekErr != nil {
-				// only overwrite err in case the seek fails: we need to
-				// report an eventual io.EOF to the caller
-				err = seekErr
-			}
-		}
-		return n, err
-	}
-	if f.Base != nil {
-		return f.Base.Read(s)
-	}
-	return 0, BADFD
+	fmt.Println("union read")
+	n, err := f.Layer.Read(s)
+	f.off += int64(n)
+	return n, err
 }
 
 func (f *UnionFile) ReadAt(s []byte, o int64) (int, error) {
-	if f.Layer != nil {
-		n, err := f.Layer.ReadAt(s, o)
-		if (err == nil || err == io.EOF) && f.Base != nil {
-			_, err = f.Base.Seek(o+int64(n), io.SeekStart)
-		}
-		return n, err
-	}
-	if f.Base != nil {
-		return f.Base.ReadAt(s, o)
-	}
-	return 0, BADFD
+	fmt.Println("union read at")
+	n, err := f.Layer.ReadAt(s, o)
+	f.off += int64(n)
+	return n, err
 }
 
 func (f *UnionFile) Seek(o int64, w int) (pos int64, err error) {
-	if f.Layer != nil {
-		pos, err = f.Layer.Seek(o, w)
-		if (err == nil || err == io.EOF) && f.Base != nil {
-			_, err = f.Base.Seek(o, w)
-		}
-		return pos, err
-	}
-	if f.Base != nil {
-		return f.Base.Seek(o, w)
-	}
-	return 0, BADFD
+	pos, err = f.Layer.Seek(o, w)
+	f.off = pos
+	return pos, err
 }
 
 func (f *UnionFile) Write(s []byte) (n int, err error) {
-	if f.Layer != nil {
-		n, err = f.Layer.Write(s)
-		if err != nil {
-			return 0, fmt.Errorf("error writing to layer file: %v", err)
-		}
-		if f.Base != nil { // hmm, do we have fixed size files where a write may hit the EOF mark?
-			if _, err := f.Base.Write(s); err != nil {
-				return 0, fmt.Errorf("error writing to base file: %v", err)
-			}
-		}
-		return n, nil
+	n, err = f.Layer.Write(s)
+	if err != nil {
+		return 0, fmt.Errorf("error writing to layer file: %v", err)
 	}
-	if f.Base != nil {
-		return f.Base.Write(s)
+	if _, err := f.Base.Seek(f.off, io.SeekStart); err != nil {
+		return 0, fmt.Errorf("error syncing base file: %v", err)
 	}
-	return 0, BADFD
+	if _, err := f.Base.Write(s); err != nil {
+		return 0, fmt.Errorf("error writing to base file: %v", err)
+	}
+	f.off += int64(n)
+	return n, nil
 }
 
 func (f *UnionFile) WriteAt(s []byte, o int64) (n int, err error) {
-	if f.Layer != nil {
-		n, err = f.Layer.WriteAt(s, o)
-		if err == nil && f.Base != nil {
-			_, err = f.Base.WriteAt(s, o)
-		}
-		return n, err
+	n, err = f.Layer.WriteAt(s, o)
+	if err != nil {
+		return 0, fmt.Errorf("error writing to layer file: %v", err)
 	}
-	if f.Base != nil {
-		return f.Base.WriteAt(s, o)
+	if _, err := f.Base.Seek(f.off, io.SeekStart); err != nil {
+		return 0, fmt.Errorf("error syncing base file: %v", err)
 	}
-	return 0, BADFD
+	_, err = f.Base.WriteAt(s, o)
+	f.off += int64(n)
+	return n, err
 }
 
 func (f *UnionFile) Name() string {
-	if f.Layer != nil {
-		return f.Layer.Name()
-	}
-	return f.Base.Name()
+	return f.Layer.Name()
 }
 
 // DirsMerger is how UnionFile weaves two directories together.
@@ -176,23 +151,17 @@ func (f *UnionFile) Readdir(c int) (ofi []os.FileInfo, err error) {
 		merge = defaultUnionMergeDirsFn
 	}
 
-	if f.off == 0 {
-		var lfi []os.FileInfo
-		if f.Layer != nil {
-			lfi, err = f.Layer.Readdir(-1)
-			if err != nil {
-				return nil, err
-			}
+	if f.dirOff == 0 {
+		lfi, err := f.Layer.Readdir(-1)
+		if err != nil {
+			return nil, err
 		}
 
-		var bfi []os.FileInfo
-		if f.Base != nil {
-			bfi, err = f.Base.Readdir(-1)
-			if err != nil {
-				return nil, err
-			}
-
+		bfi, err := f.Base.Readdir(-1)
+		if err != nil {
+			return nil, err
 		}
+
 		merged, err := merge(lfi, bfi)
 		if err != nil {
 			return nil, err
@@ -200,24 +169,25 @@ func (f *UnionFile) Readdir(c int) (ofi []os.FileInfo, err error) {
 		f.files = append(f.files, merged...)
 	}
 
-	if c <= 0 && len(f.files) == 0 {
-		return f.files, nil
-	}
-
-	if f.off >= len(f.files) {
-		return nil, io.EOF
-	}
-
 	if c <= 0 {
-		return f.files[f.off:], nil
-	}
+		defer func() { f.dirOff = len(f.files) }()
+		if f.dirOff >= len(f.files) {
+			return nil, nil
+		} else {
+			return f.files[f.dirOff:len(f.files)], nil
+		}
+	} else {
+		if f.dirOff+c > len(f.files) {
+			c = len(f.files) - f.dirOff
+		}
 
-	if c > len(f.files) {
-		c = len(f.files)
-	}
+		if f.dirOff >= len(f.files) {
+			return nil, io.EOF
+		}
 
-	defer func() { f.off += c }()
-	return f.files[f.off:c], nil
+		defer func() { f.dirOff += c }()
+		return f.files[f.dirOff : f.dirOff+c], nil
+	}
 }
 
 func (f *UnionFile) Readdirnames(c int) ([]string, error) {
@@ -233,78 +203,64 @@ func (f *UnionFile) Readdirnames(c int) ([]string, error) {
 }
 
 func (f *UnionFile) Stat() (os.FileInfo, error) {
-	if f.Layer != nil {
-		return f.Layer.Stat()
-	}
-	if f.Base != nil {
-		return f.Base.Stat()
-	}
-	return nil, BADFD
+	return f.Layer.Stat()
 }
 
-func (f *UnionFile) Sync() (err error) {
-	if f.Layer != nil {
-		err = f.Layer.Sync()
-		if err == nil && f.Base != nil {
-			err = f.Base.Sync()
-		}
-		return err
+func (f *UnionFile) Sync() error {
+	if err := f.Layer.Sync(); err != nil {
+		return fmt.Errorf("error syncing layer file: %v", err)
 	}
-	if f.Base != nil {
-		return f.Base.Sync()
+	if err := f.Base.Sync(); err != nil {
+		return fmt.Errorf("error syncing base file: %v", err)
 	}
-	return BADFD
+
+	return nil
 }
 
-func (f *UnionFile) Truncate(s int64) (err error) {
-	if f.Layer != nil {
-		err = f.Layer.Truncate(s)
-		if err == nil && f.Base != nil {
-			err = f.Base.Truncate(s)
-		}
-		return err
+func (f *UnionFile) Truncate(s int64) error {
+	if err := f.Layer.Truncate(s); err != nil {
+		return fmt.Errorf("error truncating layer file: %v", err)
 	}
-	if f.Base != nil {
-		return f.Base.Truncate(s)
+	if _, err := f.Base.Seek(f.off, io.SeekStart); err != nil {
+		return fmt.Errorf("error syncing base file: %v", err)
 	}
-	return BADFD
+	if err := f.Base.Truncate(s); err != nil {
+		return fmt.Errorf("error truncating base file :%v", err)
+	}
+	off, err := f.Layer.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return fmt.Errorf("error seeking layer file: %v", err)
+	}
+	f.off = off
+	return nil
 }
 
-func (f *UnionFile) WriteString(s string) (n int, err error) {
-	if f.Layer != nil {
-		n, err = f.Layer.WriteString(s)
-		if err == nil && f.Base != nil {
-			_, err = f.Base.WriteString(s)
-		}
-		return n, err
+func (f *UnionFile) WriteString(s string) (int, error) {
+	n, err := f.Layer.WriteString(s)
+	if err != nil {
+		return 0, fmt.Errorf("error writing string to layer file: %v", err)
 	}
-	if f.Base != nil {
-		return f.Base.WriteString(s)
+	if _, err := f.Base.Seek(f.off, io.SeekStart); err != nil {
+		return 0, fmt.Errorf("error syncing base file: %v", err)
 	}
-	return 0, BADFD
+	if _, err := f.Base.WriteString(s); err != nil {
+		return 0, fmt.Errorf("error writing string to base file: %v", err)
+	}
+
+	f.off += int64(n)
+	return n, nil
 }
 
 func (f *UnionFile) CanMmap() bool {
-	if f.Layer != nil {
-		return f.Layer.CanMmap()
-	}
-	return false
+	return f.Layer.CanMmap()
 }
 
 func (f *UnionFile) Mmap(offset int64, length int, prot int, flags int) ([]byte, error) {
-	if f.Layer == nil {
-		return nil, fmt.Errorf("mmap not supported")
-	} else {
-		return f.Layer.Mmap(offset, length, prot, flags)
-	}
+	return f.Layer.Mmap(offset, length, prot, flags)
 }
 
 func (f *UnionFile) Munmap() error {
-	if f.Layer == nil {
-		return fmt.Errorf("mmap not supported")
-	} else {
-		return f.Layer.Munmap()
-	}
+	return f.Layer.Munmap()
 }
 
 func copyToLayer(base Fs, layer Fs, name string) error {
