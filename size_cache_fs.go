@@ -29,10 +29,12 @@ func (u *SizeCacheFS) cacheStatus(name string) (state cacheState, fi os.FileInfo
 	var lfi, bfi os.FileInfo
 	lfi, err = u.cache.Stat(name)
 	if err == nil {
+		fmt.Println("layer time", lfi.ModTime())
 		bfi, err = u.base.Stat(name)
 		if err != nil {
 			return cacheLocal, lfi, nil
 		}
+		fmt.Println("base time", bfi.ModTime())
 		if bfi.ModTime().After(lfi.ModTime()) {
 			return cacheStale, bfi, nil
 		}
@@ -121,7 +123,10 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 	}
 	switch st {
 	case cacheLocal, cacheHit:
+		fmt.Println("CACHE HIT", name)
+
 	default:
+		fmt.Println("CACHE MISS", name)
 		if flag&(os.O_TRUNC) == 0 {
 			exists, err := Exists(u.base, name)
 			if err != nil {
@@ -139,14 +144,18 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 		if err != nil {
 			return nil, err
 		}
-		lfi, err := u.cache.OpenFile(name, flag, perm)
+
+		// Force read write mode
+		cacheFlag := (flag & (^os.O_WRONLY)) | os.O_RDWR
+
+		lfi, err := u.cache.OpenFile(name, cacheFlag, perm)
 		if err != nil {
 			bfi.Close() // oops, what if O_TRUNC was set and file opening in the layer failed...?
 			return nil, err
 		}
-		uf, err := NewUnionFile(bfi, lfi)
+		uf := NewBufferFile(bfi, lfi, flag, u.cache, false)
 		if err != nil {
-			return nil, fmt.Errorf("error creating union file: %v", err)
+			return nil, fmt.Errorf("error creating buffer file: %v", err)
 		}
 		return uf, nil
 	} else {
@@ -165,6 +174,7 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 		return u.cache.Open(name)
 
 	case cacheMiss:
+		fmt.Println("CACHE MISS", name)
 		bfi, err := u.base.Stat(name)
 		if err != nil {
 			return nil, err
@@ -178,6 +188,7 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 		return u.cache.Open(name)
 
 	case cacheStale:
+		fmt.Println("CACHE STALE", name)
 		if !fi.IsDir() {
 			if err := u.copyToLayer(name); err != nil {
 				return nil, err
@@ -185,6 +196,7 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 			return u.cache.Open(name)
 		}
 	case cacheHit:
+		fmt.Println("CACHE HIT", name)
 		if !fi.IsDir() {
 			return u.cache.Open(name)
 		}
@@ -195,9 +207,9 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 	if err != nil && bfile == nil {
 		return nil, err
 	}
-	uf, err := NewUnionFile(bfile, lfile)
+	uf := NewBufferFile(bfile, lfile, os.O_RDONLY, u.cache, false)
 	if err != nil {
-		return nil, fmt.Errorf("error creating union file: %v", err)
+		return nil, fmt.Errorf("error creating buffer file: %v", err)
 	}
 	return uf, nil
 }
