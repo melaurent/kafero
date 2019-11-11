@@ -61,14 +61,12 @@ func (f *UnionFile) Close() error {
 }
 
 func (f *UnionFile) Read(s []byte) (int, error) {
-	fmt.Println("union read")
 	n, err := f.Layer.Read(s)
 	f.off += int64(n)
 	return n, err
 }
 
 func (f *UnionFile) ReadAt(s []byte, o int64) (int, error) {
-	fmt.Println("union read at")
 	n, err := f.Layer.ReadAt(s, o)
 	f.off += int64(n)
 	return n, err
