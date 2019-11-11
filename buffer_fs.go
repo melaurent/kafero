@@ -112,12 +112,8 @@ func (u *BufferFs) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 	if _, err := layerFile.Seek(0, 0); err != nil {
 		return nil, fmt.Errorf("error seeking buffer file: %v", err)
 	}
-	return &BufferFile{
-		LayerFs: u.layer,
-		Base:    baseFile,
-		Buffer:  layerFile,
-		Flag:    flag,
-	}, nil
+
+	return NewBufferFile(baseFile, layerFile, flag, u.layer, true), nil
 }
 
 func (u *BufferFs) Open(name string) (File, error) {
@@ -138,12 +134,7 @@ func (u *BufferFs) Open(name string) (File, error) {
 		return nil, fmt.Errorf("error seeking buffer file: %v", err)
 	}
 
-	return &BufferFile{
-		LayerFs: u.layer,
-		Base:    baseFile,
-		Buffer:  layerFile,
-		Flag:    os.O_RDONLY,
-	}, nil
+	return NewBufferFile(baseFile, layerFile, os.O_RDONLY, u.layer, true), nil
 }
 
 func (u *BufferFs) Mkdir(name string, perm os.FileMode) error {
