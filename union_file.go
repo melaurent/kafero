@@ -57,6 +57,7 @@ func (f *UnionFile) Close() error {
 	if err := f.Layer.Close(); err != nil {
 		return fmt.Errorf("error closing layer file: %v", err)
 	}
+
 	return nil
 }
 
