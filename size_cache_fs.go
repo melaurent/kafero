@@ -1,7 +1,10 @@
 package kafero
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/wangjia184/sortedset"
+	"math"
 	"os"
 	"syscall"
 	"time"
@@ -11,18 +14,90 @@ import (
 // the cache layer has a maximal size, and files get evicted relative to their
 // last use time (read or edited).
 
-// If the file is on cache, it is up to date ? Not necessarily
 // If you change something on the file, need to change on base and cache
-// even if cache is stale, easier to just do it
+// even if cache is stale (invalidated), easier to just do it
+
+type cacheFile struct {
+	path           string
+	size           int64
+	lastAccessTime int64
+}
 
 type SizeCacheFS struct {
 	base      Fs
 	cache     Fs
-	cacheSize uint64
+	cacheSize int64
+	currSize  int64
+	files     *sortedset.SortedSet
 }
 
-func NewSizeCacheFS(base Fs, cache Fs, cacheSize uint64) Fs {
-	return &SizeCacheFS{base: base, cache: cache, cacheSize: cacheSize}
+func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (Fs, error) {
+	if cacheSize < 0 {
+		cacheSize = 0
+	}
+	exists, err := Exists(cache, ".cacheindex")
+	if err != nil {
+		return nil, fmt.Errorf("error determining if cache index exists: %v", err)
+	}
+	var files []*cacheFile
+	if !exists {
+		err := Walk(cache, "", func(path string, info os.FileInfo, err error) error {
+			if !info.IsDir() {
+				file := &cacheFile{
+					path: path,
+					size: info.Size(),
+					lastAccessTime: info.ModTime().UnixNano() / 1000000,
+				}
+				files = append(files, file)
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error building cache index: %v", err)
+		}
+	} else {
+		data, err := ReadFile(cache, ".cacheindex")
+		if err != nil {
+			return nil, fmt.Errorf("error reading cache index: %v", err)
+		}
+		if err := json.Unmarshal(data, &files); err != nil {
+			return nil, fmt.Errorf("error unmarshalling files: %v", err)
+		}
+	}
+
+	var currSize int64 = 0
+	set := sortedset.New()
+	for _, f := range files {
+		set.AddOrUpdate(f.path, sortedset.SCORE(f.lastAccessTime), f)
+		currSize += f.size
+	}
+
+	fs := &SizeCacheFS{
+		base:      base,
+		cache:     cache,
+		cacheSize: cacheSize,
+		currSize:  currSize,
+		files:     set,
+	}
+
+	return fs, nil
+}
+
+func (u *SizeCacheFS) evict() error {
+	for u.currSize > u.cacheSize {
+		node := u.files.PopMin()
+		// node CAN'T be nil as currSize > 0
+		// we know currSize > 0 because the smallest value cache size can take is 0
+		file := node.Value.(*cacheFile)
+		fmt.Println("EVICTED", file.path)
+		if err := u.cache.Remove(file.path); err != nil {
+			return fmt.Errorf("error removing cache file: %v", err)
+		}
+		u.currSize -= file.size
+	}
+
+	return nil
 }
 
 func (u *SizeCacheFS) cacheStatus(name string) (state cacheState, fi os.FileInfo, err error) {
@@ -93,13 +168,18 @@ func (u *SizeCacheFS) Rename(oldname, newname string) error {
 }
 
 func (u *SizeCacheFS) Remove(name string) error {
-	exists, err := Exists(u.cache, name)
-	if err != nil {
-		return err
+	exists := false
+	fstat, err := u.cache.Stat(name)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("error getting cache file stat: %v", err)
+	} else {
+		exists = true
 	}
+
 	// If cache file exists, update to ensure consistency
 	if exists {
 		_ = u.cache.Remove(name)
+		u.currSize -= fstat.Size()
 	}
 	return u.base.Remove(name)
 }
@@ -139,6 +219,10 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 			}
 		}
 	}
+	info := u.files.GetByKey(name)
+	if info == nil {
+		return nil,
+	}
 	if flag&(os.O_WRONLY|syscall.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
 		bfi, err := u.base.OpenFile(name, flag, perm)
 		if err != nil {
@@ -153,7 +237,7 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 			bfi.Close() // oops, what if O_TRUNC was set and file opening in the layer failed...?
 			return nil, err
 		}
-		uf := NewBufferFile(bfi, lfi, flag, u.cache, false)
+		uf := NewSizeCacheFile(bfi, lfi, flag, u.cache, )
 		if err != nil {
 			return nil, fmt.Errorf("error creating buffer file: %v", err)
 		}
@@ -251,4 +335,21 @@ func (u *SizeCacheFS) Create(name string) (File, error) {
 		return nil, fmt.Errorf("error creating union file: %v", err)
 	}
 	return uf, nil
+}
+
+func (u *SizeCacheFS) Close() error {
+	// Save index
+	var files []*cacheFile
+	nodes := u.files.GetByScoreRange(math.MinInt64, math.MaxInt64, nil)
+	for _, n := range nodes {
+		files = append(files, n.Value.(*cacheFile))
+	}
+	data, err := json.Marshal(files)
+	if err != nil {
+		return fmt.Errorf("error marshalling files: %v", err)
+	}
+	if err := WriteFile(u.cache, ".cacheindex", data, 0644); err != nil {
+		return fmt.Errorf("error writing cache index: %v", err)
+	}
+	return nil
 }
