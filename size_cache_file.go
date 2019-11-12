@@ -9,19 +9,19 @@ import (
 )
 
 type SizeCacheFile struct {
-	Fs    SizeCacheFS
 	Base  File
 	Cache File
 	Flag  int
+	fs    *SizeCacheFS
 	info  *cacheFile
 }
 
-func NewSizeCacheFile(base File, cache File, flag int, Fs SizeCacheFS, info *cacheFile) File {
+func NewSizeCacheFile(base File, cache File, flag int, fs *SizeCacheFS, info *cacheFile) File {
 	return &SizeCacheFile{
-		Fs:    Fs,
 		Base:  base,
 		Cache: cache,
 		Flag:  flag,
+		fs:    fs,
 		info:  info,
 	}
 }
@@ -40,14 +40,16 @@ func (f *SizeCacheFile) Close() error {
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
 	}
-	_ = f.Fs.cache.Chtimes(f.Cache.Name(), fstat.ModTime(), fstat.ModTime())
+	_ = f.fs.cache.Chtimes(f.Cache.Name(), fstat.ModTime(), fstat.ModTime())
 	// Each open file gets removed from the cache to prevent
 	// its deletion, so we add it back
 	f.info.lastAccessTime = time.Now().UnixNano() / 1000000
-	f.Fs.files.AddOrUpdate(f.Cache.Name(), sortedset.SCORE(f.info.lastAccessTime), f.info)
-	f.Fs.currSize += fstat.Size()
+	f.info.size = fstat.Size()
+	if f.fs.files.AddOrUpdate(f.Cache.Name(), sortedset.SCORE(f.info.lastAccessTime), f.info) {
+		f.fs.currSize += f.info.size
+	}
 
-	return nil
+	return f.fs.evict()
 }
 
 func (f *SizeCacheFile) Read(b []byte) (int, error) {
