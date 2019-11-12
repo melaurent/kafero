@@ -11,16 +11,14 @@ type BufferFile struct {
 	Base    File
 	Buffer  File
 	Flag    int
-	delete  bool
 }
 
-func NewBufferFile(base File, buffer File, flag int, layerFs Fs, delete bool) File {
+func NewBufferFile(base File, buffer File, flag int, layerFs Fs) File {
 	return &BufferFile{
 		LayerFs: layerFs,
 		Base:    base,
 		Buffer:  buffer,
 		Flag:    flag,
-		delete:  delete,
 	}
 }
 
@@ -28,21 +26,13 @@ func (f *BufferFile) Close() error {
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("error syncing to base file: %v", err)
 	}
-	fstat, err := f.Base.Stat()
-	if err != nil {
-		return fmt.Errorf("error getting base file stat: %v", err)
-	}
 	if err := f.Buffer.Close(); err != nil {
 		return fmt.Errorf("error closing buffer file: %v", err)
 	}
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
 	}
-	if f.delete {
-		_ = f.LayerFs.Remove(f.Buffer.Name())
-	} else {
-		_ = f.LayerFs.Chtimes(f.Buffer.Name(), fstat.ModTime(), fstat.ModTime())
-	}
+	_ = f.LayerFs.Remove(f.Buffer.Name())
 	return nil
 }
 
