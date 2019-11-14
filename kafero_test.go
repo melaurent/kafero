@@ -368,7 +368,9 @@ func TestReadAt(t *testing.T) {
 		defer f.Close()
 
 		const data = "hello, world\n"
-		io.WriteString(f, data)
+		if _, err := io.WriteString(f, data); err != nil {
+			t.Fatalf("error writing string: %v", err)
+		}
 
 		b := make([]byte, 5)
 		n, err := f.ReadAt(b, 7)
