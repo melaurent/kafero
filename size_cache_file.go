@@ -2,7 +2,6 @@ package kafero
 
 import (
 	"fmt"
-	"github.com/wangjia184/sortedset"
 	"io"
 	"os"
 	"time"
@@ -40,16 +39,22 @@ func (f *SizeCacheFile) Close() error {
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
 	}
-	_ = f.fs.cache.Chtimes(f.Cache.Name(), fstat.ModTime(), fstat.ModTime())
-	// Each open file gets removed from the cache to prevent
-	// its deletion, so we add it back
-	f.info.lastAccessTime = time.Now().UnixNano() / 1000000
-	f.info.size = fstat.Size()
-	if f.fs.files.AddOrUpdate(f.Cache.Name(), sortedset.SCORE(f.info.lastAccessTime), f.info) {
-		f.fs.currSize += f.info.size
+
+	if !fstat.IsDir() {
+		_ = f.fs.cache.Chtimes(f.Cache.Name(), fstat.ModTime(), fstat.ModTime())
+		// Each open file gets removed from the cache to prevent
+		// its deletion, so we add it back
+		f.info.LastAccessTime = time.Now().UnixNano() / 1000
+		// TODO locks
+		f.fs.currSize -= f.info.Size
+		f.info.Size = fstat.Size()
+		f.fs.currSize += f.info.Size
+		if err := f.fs.evict(); err != nil {
+			return fmt.Errorf("error evicting files from cache: %v", err)
+		}
 	}
 
-	return f.fs.evict()
+	return nil
 }
 
 func (f *SizeCacheFile) Read(b []byte) (int, error) {
@@ -57,7 +62,7 @@ func (f *SizeCacheFile) Read(b []byte) (int, error) {
 }
 
 func (f *SizeCacheFile) ReadAt(b []byte, o int64) (int, error) {
-	return f.Cache.Read(b)
+	return f.Cache.ReadAt(b, o)
 }
 
 func (f *SizeCacheFile) Seek(o int64, w int) (int64, error) {
@@ -65,21 +70,11 @@ func (f *SizeCacheFile) Seek(o int64, w int) (int64, error) {
 }
 
 func (f *SizeCacheFile) Write(b []byte) (int, error) {
-	n, err := f.Cache.Write(b)
-	if err != nil {
-		return 0, err
-	} else {
-		return n, nil
-	}
+	return f.Cache.Write(b)
 }
 
 func (f *SizeCacheFile) WriteAt(b []byte, o int64) (int, error) {
-	n, err := f.Cache.WriteAt(b, o)
-	if err != nil {
-		return 0, err
-	} else {
-		return n, nil
-	}
+	return f.Cache.WriteAt(b, o)
 }
 
 func (f *SizeCacheFile) Name() string {
