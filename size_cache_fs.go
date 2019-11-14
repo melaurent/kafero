@@ -83,6 +83,7 @@ func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
 		files:     set,
 	}
 
+	fmt.Println("Cache size:", fs.currSize)
 	return fs, nil
 }
 
@@ -92,11 +93,14 @@ func (u *SizeCacheFS) evict() error {
 		// node CAN'T be nil as currSize > 0
 		// we know currSize > 0 because the smallest value cache size can take is 0
 		file := node.Value.(*cacheFile)
+		fmt.Println("evicting ", file.Path)
 		if err := u.cache.Remove(file.Path); err != nil {
 			return fmt.Errorf("error removing cache file: %v", err)
 		}
 		u.currSize -= file.Size
 	}
+
+	fmt.Println("Cache size:", u.currSize)
 
 	return nil
 }
@@ -192,7 +196,7 @@ func (u *SizeCacheFS) copyToCache(name string) error {
 	u.currSize += bfi.Size()
 	u.files.AddOrUpdate(name, sortedset.SCORE(info.LastAccessTime), info)
 
-	return u.evict()
+	return nil
 }
 
 func (u *SizeCacheFS) Chtimes(name string, atime, mtime time.Time) error {
@@ -293,15 +297,13 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 	case cacheLocal, cacheHit:
 
 	default:
-		if flag&(os.O_TRUNC) == 0 {
-			exists, err := Exists(u.base, name)
-			if err != nil {
-				return nil, fmt.Errorf("error determining if base file exists: %v", err)
-			}
-			if exists {
-				if err := u.copyToCache(name); err != nil {
-					return nil, err
-				}
+		exists, err := Exists(u.base, name)
+		if err != nil {
+			return nil, fmt.Errorf("error determining if base file exists: %v", err)
+		}
+		if exists {
+			if err := u.copyToCache(name); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -309,7 +311,13 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 	node := u.files.GetByKey(name)
 	var info *cacheFile
 	if node == nil {
-
+		// Need to create file
+		info = &cacheFile{
+			Path:           name,
+			Size:           0,
+			LastAccessTime: time.Now().UnixNano() / 1000,
+		}
+		u.files.AddOrUpdate(name, sortedset.SCORE(info.LastAccessTime), info)
 	} else {
 		info = node.Value.(*cacheFile)
 	}

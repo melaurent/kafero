@@ -122,6 +122,7 @@ func (b *BasePathFs) OpenFile(name string, flag int, mode os.FileMode) (f File, 
 	if name, err = b.RealPath(name); err != nil {
 		return nil, &os.PathError{Op: "openfile", Path: name, Err: err}
 	}
+
 	sourcef, err := b.source.OpenFile(name, flag, mode)
 	if err != nil {
 		return nil, err

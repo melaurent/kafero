@@ -39,11 +39,11 @@ func (f *SizeCacheFile) Close() error {
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
 	}
-
-	if !fstat.IsDir() {
-		_ = f.fs.cache.Chtimes(f.Cache.Name(), fstat.ModTime(), fstat.ModTime())
-		// Each open file gets removed from the cache to prevent
-		// its deletion, so we add it back
+	err = f.fs.cache.Chtimes(f.info.Path, fstat.ModTime(), fstat.ModTime())
+	// If we haven't already been evicted..
+	node := f.fs.files.GetByKey(f.info.Path)
+	fmt.Println("CLOSING", f.info.Path)
+	if !fstat.IsDir() && node != nil {
 		f.info.LastAccessTime = time.Now().UnixNano() / 1000
 		// TODO locks
 		f.fs.currSize -= f.info.Size
