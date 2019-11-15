@@ -44,6 +44,9 @@ func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
 	var files []*cacheFile
 	if !exists {
 		err := Walk(cache, "", func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
 			if !info.IsDir() {
 				file := &cacheFile{
 					Path:           path,
@@ -83,7 +86,6 @@ func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
 		files:     set,
 	}
 
-	fmt.Println("Cache size:", fs.currSize)
 	return fs, nil
 }
 
@@ -93,14 +95,34 @@ func (u *SizeCacheFS) evict() error {
 		// node CAN'T be nil as currSize > 0
 		// we know currSize > 0 because the smallest value cache size can take is 0
 		file := node.Value.(*cacheFile)
-		fmt.Println("evicting ", file.Path)
 		if err := u.cache.Remove(file.Path); err != nil {
 			return fmt.Errorf("error removing cache file: %v", err)
 		}
 		u.currSize -= file.Size
-	}
 
-	fmt.Println("Cache size:", u.currSize)
+		path := file.Path
+		for path != "" && path != "." && path != "/" {
+			parent := filepath.Dir(path)
+			f, err := u.cache.Open(parent)
+			if err != nil {
+				return fmt.Errorf("error opening parent directory: %v", err)
+			}
+			dirs, err := f.Readdir(-1)
+			if err != nil {
+				return fmt.Errorf("error reading parent directory: %v", err)
+			}
+			_ = f.Close()
+
+			if len(dirs) == 0 {
+				if err := u.cache.Remove(parent); err != nil {
+					return fmt.Errorf("error removing parent directory: %v", err)
+				}
+				path = parent
+			} else {
+				break
+			}
+		}
+	}
 
 	return nil
 }
@@ -272,6 +294,9 @@ func (u *SizeCacheFS) RemoveAll(name string) error {
 	// If cache file exists, update to ensure consistency
 	if exists {
 		err := Walk(u.cache, name, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
 			if !info.IsDir() {
 				return u.Remove(path)
 			} else {
