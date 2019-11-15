@@ -186,3 +186,24 @@ func TestSizeCacheFS_ReadEvicted(t *testing.T) {
 		t.Fatalf("error closing evicted file: %v", err)
 	}
 }
+
+func BenchmarkSizeCacheFS(b *testing.B) {
+	base := NewBasePathFs(&OsFs{}, "tmp")
+	cache := &MemMapFs{}
+
+	// Write 10 10 bytes files, check if size is 100
+	var cacheFs, _ = NewSizeCacheFS(base, cache, 100)
+	for i := 0; i < 100; i++ {
+		f, err := cacheFs.Create(fmt.Sprintf("%d.txt", i))
+		if err != nil {
+			b.Fatalf("error creating test file: %v", err)
+		}
+		if _, err := f.WriteString("0123456789"); err != nil {
+			b.Fatalf("error writing string: %v", err)
+		}
+		if err := f.Close(); err != nil {
+			b.Fatalf("error closing file: %v", err)
+		}
+	}
+	_ = cacheFs.Close()
+}
