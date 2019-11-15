@@ -42,7 +42,6 @@ func (f *SizeCacheFile) Close() error {
 	err = f.fs.cache.Chtimes(f.info.Path, fstat.ModTime(), fstat.ModTime())
 	// If we haven't already been evicted..
 	node := f.fs.files.GetByKey(f.info.Path)
-	fmt.Println("CLOSING", f.info.Path)
 	if !fstat.IsDir() && node != nil {
 		f.info.LastAccessTime = time.Now().UnixNano() / 1000
 		// TODO locks

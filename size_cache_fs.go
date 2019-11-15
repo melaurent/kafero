@@ -105,10 +105,12 @@ func (u *SizeCacheFS) evict() error {
 			parent := filepath.Dir(path)
 			f, err := u.cache.Open(parent)
 			if err != nil {
+				_ = f.Close()
 				return fmt.Errorf("error opening parent directory: %v", err)
 			}
 			dirs, err := f.Readdir(-1)
 			if err != nil {
+				_ = f.Close()
 				return fmt.Errorf("error reading parent directory: %v", err)
 			}
 			_ = f.Close()
