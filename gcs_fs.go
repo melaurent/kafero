@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"github.com/melaurent/kafero/gcs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -76,6 +77,10 @@ func (fs *GcsFs) Create(name string) (File, error) {
 }
 
 func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
+	base := path.Base(name)
+	if base == "." || base == ".." {
+		return nil
+	}
 	name = fs.trimRoot(name)
 	name = filepath.Clean(normSeparators(name, fs.separator))
 	obj := fs.getObj(name)
