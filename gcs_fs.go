@@ -96,6 +96,16 @@ func (fs *GcsFs) Mkdir(name string, perm os.FileMode) error {
 }
 
 func (fs *GcsFs) MkdirAll(path string, perm os.FileMode) error {
+
+	exists, err := Exists(fs, path)
+	if err != nil {
+		return fmt.Errorf("error determining if file exists: %v", err)
+	}
+
+	if exists {
+		return nil
+	}
+
 	path = fs.trimRoot(path)
 
 	root := ""
@@ -122,13 +132,12 @@ func (fs *GcsFs) Open(name string) (File, error) {
 func (fs *GcsFs) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	// No distinction between root and cwd !!TODO ?
 	name = fs.trimRoot(name)
+	dir := filepath.Dir(name)
+
 	// If create flag, ensure directory exists
-	if flag&os.O_CREATE != 0 {
-		dir := filepath.Dir(name)
+	if flag&os.O_CREATE != 0 && dir != "." {
 		if _, err := fs.Stat(dir); err == os.ErrNotExist {
-			if err := fs.MkdirAll(dir, 0); err != nil {
-				return nil, fmt.Errorf("error making all dir: %v", err)
-			}
+			return nil, fmt.Errorf("create %s: no such file or directory", name)
 		}
 	}
 
