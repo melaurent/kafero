@@ -52,6 +52,7 @@ func (u *CacheOnReadFs) cacheStatus(name string) (state cacheState, fi os.FileIn
 		if u.cacheTime == 0 {
 			return cacheHit, lfi, nil
 		}
+		// TODO checking even if shouldnt ?
 		if lfi.ModTime().Add(u.cacheTime).Before(time.Now()) {
 			bfi, err = u.base.Stat(name)
 			if err != nil {
