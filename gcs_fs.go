@@ -230,7 +230,7 @@ func (fs *GcsFs) Walk(root string, walkFn filepath.WalkFunc) error {
 
 	ctx := context.Background()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	it := fs.bucket.Objects(ctx, &storage.Query{
 		Prefix: root,
@@ -240,13 +240,17 @@ func (fs *GcsFs) Walk(root string, walkFn filepath.WalkFunc) error {
 		if err == iterator.Done {
 			break
 		}
+		var info *gcs.FileInfo
 		fName := ""
 		if attrs != nil {
 			fName = attrs.Name
+			info = &gcs.FileInfo{
+				ObjAtt: attrs,
+			}
+		} else {
+			fmt.Println("NIL ATTRIBUTE", err)
 		}
-		info := &gcs.FileInfo{
-			ObjAtt: attrs,
-		}
+
 		if err := walkFn(fName, info, err); err != nil {
 			return err
 		}
