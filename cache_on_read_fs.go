@@ -192,7 +192,7 @@ func (u *CacheOnReadFs) OpenFile(name string, flag int, perm os.FileMode) (File,
 	switch st {
 	case cacheLocal, cacheHit:
 	default:
-		if flag&os.O_CREATE == 0 {
+		if flag&os.O_TRUNC == 0 {
 			if err := u.copyToLayer(name); err != nil {
 				return nil, err
 			}

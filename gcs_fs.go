@@ -225,3 +225,36 @@ func (fs *GcsFs) Chmod(name string, mode os.FileMode) error {
 func (fs *GcsFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	return fmt.Errorf("chtimes not implemented: Create, Delete, Updated times are read only fields in GCS and set implicitly")
 }
+
+func (fs *GcsFs) Walk(root string, walkFn filepath.WalkFunc) error {
+
+	ctx := context.Background()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	it := fs.bucket.Objects(ctx, &storage.Query{
+		Prefix: root,
+	})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		var info *gcs.FileInfo
+		fName := ""
+		if attrs != nil {
+			fName = attrs.Name
+			info = &gcs.FileInfo{
+				ObjAtt: attrs,
+			}
+		} else {
+			fmt.Println("NIL ATTRIBUTE", err)
+		}
+
+		if err := walkFn(fName, info, err); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
