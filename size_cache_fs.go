@@ -100,10 +100,9 @@ func (u *SizeCacheFS) evict() error {
 		}
 		u.currSize -= file.Size
 
-		path := file.Path
+		path := filepath.Dir(file.Path)
 		for path != "" && path != "." && path != "/" {
-			parent := filepath.Dir(path)
-			f, err := u.cache.Open(parent)
+			f, err := u.cache.Open(path)
 			if err != nil {
 				_ = f.Close()
 				return fmt.Errorf("error opening parent directory: %v", err)
@@ -116,10 +115,10 @@ func (u *SizeCacheFS) evict() error {
 			_ = f.Close()
 
 			if len(dirs) == 0 {
-				if err := u.cache.Remove(parent); err != nil {
+				if err := u.cache.Remove(path); err != nil {
 					return fmt.Errorf("error removing parent directory: %v", err)
 				}
-				path = parent
+				path = filepath.Dir(path)
 			} else {
 				break
 			}
