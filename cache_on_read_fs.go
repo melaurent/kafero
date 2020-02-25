@@ -165,7 +165,11 @@ func (u *CacheOnReadFs) Remove(name string) error {
 	if err != nil {
 		return err
 	}
-	return u.layer.Remove(name)
+	if st == cacheMiss {
+		return nil
+	} else {
+		return u.layer.Remove(name)
+	}
 }
 
 func (u *CacheOnReadFs) RemoveAll(name string) error {
