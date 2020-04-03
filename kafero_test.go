@@ -387,7 +387,6 @@ func TestWriteAt(t *testing.T) {
 	defer removeAllTestFiles(t)
 	for _, fs := range Fss {
 		f := tmpFile(fs)
-		defer f.Close()
 
 		const data = "hello, world\n"
 		io.WriteString(f, data)
@@ -403,14 +402,14 @@ func TestWriteAt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: ReadFile %s: %v", fs.Name(), f.Name(), err)
 		}
-		defer f2.Close()
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(f2)
 		b := buf.Bytes()
 		if string(b) != "hello, WORLD\n" {
 			t.Fatalf("after write: have %q want %q", string(b), "hello, WORLD\n")
 		}
-
+		f.Close()
+		f2.Close()
 	}
 }
 
@@ -441,29 +440,45 @@ func setupTestFiles(t *testing.T, fs Fs, path string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString("Testfile 1 content")
-	f.Close()
+	if _, err := f.WriteString("Testfile 1 content"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	f, err = fs.Create(filepath.Join(testSubDir, "testfile2"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString("Testfile 2 content")
-	f.Close()
+	if _, err := f.WriteString("Testfile 2 content"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	f, err = fs.Create(filepath.Join(testSubDir, "testfile3"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString("Testfile 3 content")
-	f.Close()
+	if _, err := f.WriteString("Testfile 3 content"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	f, err = fs.Create(filepath.Join(testSubDir, "testfile4"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString("Testfile 4 content")
-	f.Close()
+	if _, err := f.WriteString("Testfile 4 content"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return testSubDir
 }
 
@@ -501,6 +516,8 @@ func TestReaddirnames(t *testing.T) {
 
 func TestReaddirSimple(t *testing.T) {
 	defer removeAllTestFiles(t)
+	fmt.Println(tmpCacheFs.currSize)
+
 	for _, fs := range Fss {
 		testSubDir := setupTestDir(t, fs)
 		tDir := filepath.Dir(testSubDir)
