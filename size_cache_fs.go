@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -31,6 +32,7 @@ type SizeCacheFS struct {
 	cacheSize int64
 	currSize  int64
 	files     *sortedset.SortedSet
+	cacheL    sync.Mutex
 }
 
 func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
@@ -89,17 +91,31 @@ func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
 	return fs, nil
 }
 
-func (u *SizeCacheFS) evict() error {
-	for u.currSize > u.cacheSize {
+func (u *SizeCacheFS) getCacheFile(name string) (info *cacheFile) {
+	u.cacheL.Lock()
+	defer u.cacheL.Unlock()
+	node := u.files.GetByKey(name)
+	if node == nil {
+		return nil
+	} else {
+		return node.Value.(*cacheFile)
+	}
+}
+
+func (u *SizeCacheFS) addToCache(info *cacheFile) error {
+	u.cacheL.Lock()
+	defer u.cacheL.Unlock()
+
+	// while we can pop files and the cache is full..
+	for u.currSize > 0 && u.currSize+info.Size > u.cacheSize {
 		node := u.files.PopMin()
 		// node CAN'T be nil as currSize > 0
-		// we know currSize > 0 because the smallest value cache size can take is 0
 		file := node.Value.(*cacheFile)
+
 		if err := u.cache.Remove(file.Path); err != nil {
 			return fmt.Errorf("error removing cache file: %v", err)
 		}
 		u.currSize -= file.Size
-
 		path := filepath.Dir(file.Path)
 		for path != "" && path != "." && path != "/" {
 			f, err := u.cache.Open(path)
@@ -125,7 +141,24 @@ func (u *SizeCacheFS) evict() error {
 		}
 	}
 
+	u.currSize += info.Size
+	u.files.AddOrUpdate(info.Path, sortedset.SCORE(info.LastAccessTime), info)
 	return nil
+}
+
+func (u *SizeCacheFS) removeFromCache(name string) {
+	u.cacheL.Lock()
+	defer u.cacheL.Unlock()
+
+	node := u.files.GetByKey(name)
+	if node != nil {
+		// If we remove file that is open, the file will re-add itself in
+		// the cache on close. This is expected behavior as a removed open file
+		// will re-appear on close ?
+		u.files.Remove(name)
+		info := node.Value.(*cacheFile)
+		u.currSize -= info.Size
+	}
 }
 
 func (u *SizeCacheFS) cacheStatus(name string) (state cacheState, fi os.FileInfo, err error) {
@@ -216,10 +249,8 @@ func (u *SizeCacheFS) copyToCache(name string) error {
 		Size:           bfi.Size(),
 		LastAccessTime: time.Now().UnixNano() / 1000,
 	}
-	u.currSize += bfi.Size()
-	u.files.AddOrUpdate(name, sortedset.SCORE(info.LastAccessTime), info)
 
-	return nil
+	return u.addToCache(info)
 }
 
 func (u *SizeCacheFS) Chtimes(name string, atime, mtime time.Time) error {
@@ -257,10 +288,12 @@ func (u *SizeCacheFS) Rename(oldname, newname string) error {
 	}
 	// If cache file exists, update to ensure consistency
 	if exists {
-		node := u.files.GetByKey(oldname)
-		u.files.Remove(oldname)
-		info := node.Value.(*cacheFile)
-		u.files.AddOrUpdate(newname, sortedset.SCORE(info.LastAccessTime), info)
+		info := u.getCacheFile(oldname)
+		u.removeFromCache(oldname)
+		info.Path = newname
+		if err := u.addToCache(info); err != nil {
+			return err
+		}
 		if err := u.cache.Rename(oldname, newname); err != nil {
 			return err
 		}
@@ -278,11 +311,7 @@ func (u *SizeCacheFS) Remove(name string) error {
 		if err := u.cache.Remove(name); err != nil {
 			return fmt.Errorf("error removing cache file: %v", err)
 		}
-
-		node := u.files.GetByKey(name)
-		u.files.Remove(name)
-		info := node.Value.(*cacheFile)
-		u.currSize -= info.Size
+		u.removeFromCache(name)
 	}
 	return u.base.Remove(name)
 }
@@ -334,18 +363,27 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 		}
 	}
 
-	node := u.files.GetByKey(name)
+	isDir := false
+	fi, err := u.cache.Stat(name)
+	if err == nil {
+		isDir = fi.IsDir()
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	// No info for directories
 	var info *cacheFile
-	if node == nil {
-		// Need to create file
-		info = &cacheFile{
-			Path:           name,
-			Size:           0,
-			LastAccessTime: time.Now().UnixNano() / 1000,
+	if !isDir {
+		info = u.getCacheFile(name)
+		if info == nil {
+			info = &cacheFile{
+				Path:           name,
+				Size:           0,
+				LastAccessTime: time.Now().UnixNano() / 1000,
+			}
+		} else {
+			u.removeFromCache(name)
 		}
-		u.files.AddOrUpdate(name, sortedset.SCORE(info.LastAccessTime), info)
-	} else {
-		info = node.Value.(*cacheFile)
 	}
 
 	var cacheFlag = flag
@@ -364,6 +402,7 @@ func (u *SizeCacheFS) OpenFile(name string, flag int, perm os.FileMode) (File, e
 		bfi.Close() // oops, what if O_TRUNC was set and file opening in the layer failed...?
 		return nil, err
 	}
+
 	uf := NewSizeCacheFile(bfi, lfi, flag, u, info)
 
 	return uf, nil
@@ -415,8 +454,16 @@ func (u *SizeCacheFS) Open(name string) (File, error) {
 	// No info for directories
 	var info *cacheFile
 	if !fi.IsDir() {
-		node := u.files.GetByKey(name)
-		info = node.Value.(*cacheFile)
+		info = u.getCacheFile(name)
+		if info == nil {
+			info = &cacheFile{
+				Path:           name,
+				Size:           0,
+				LastAccessTime: time.Now().UnixNano() / 1000,
+			}
+		} else {
+			u.removeFromCache(name)
+		}
 	}
 
 	uf := NewSizeCacheFile(bfile, lfile, os.O_RDONLY, u, info)
@@ -461,8 +508,8 @@ func (u *SizeCacheFS) Create(name string) (File, error) {
 		Size:           0,
 		LastAccessTime: time.Now().UnixNano() / 1000,
 	}
-	u.files.AddOrUpdate(name, sortedset.SCORE(info.LastAccessTime), info)
-
+	// Ensure file is out
+	u.removeFromCache(name)
 	uf := NewSizeCacheFile(bfile, lfile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, u, info)
 	return uf, nil
 }

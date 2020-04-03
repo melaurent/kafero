@@ -39,21 +39,16 @@ func (f *SizeCacheFile) Close() error {
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
 	}
-	err = f.fs.cache.Chtimes(f.info.Path, fstat.ModTime(), fstat.ModTime())
-	// If we haven't already been evicted..
-	node := f.fs.files.GetByKey(f.info.Path)
-	if !fstat.IsDir() && node != nil {
-		f.info.LastAccessTime = time.Now().UnixNano() / 1000
-		// TODO locks
-		f.fs.currSize -= f.info.Size
+	err = f.fs.cache.Chtimes(f.Name(), fstat.ModTime(), fstat.ModTime())
+	if f.info != nil {
+		// Update size in FS
 		f.info.Size = fstat.Size()
-		f.fs.currSize += f.info.Size
-		if err := f.fs.evict(); err != nil {
-			return fmt.Errorf("error evicting files from cache: %v", err)
-		}
-	}
+		f.info.LastAccessTime = time.Now().UnixNano() / 1000
 
-	return nil
+		return f.fs.addToCache(f.info)
+	} else {
+		return nil
+	}
 }
 
 func (f *SizeCacheFile) Read(b []byte) (int, error) {
