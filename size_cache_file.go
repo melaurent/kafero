@@ -33,11 +33,11 @@ func (f *SizeCacheFile) Close() error {
 	if err != nil {
 		return fmt.Errorf("error getting base file stat: %v", err)
 	}
-	if err := f.Cache.Close(); err != nil {
-		return fmt.Errorf("error closing buffer file: %v", err)
-	}
 	if err := f.Base.Close(); err != nil {
 		return fmt.Errorf("error closing base file: %v", err)
+	}
+	if err := f.Cache.Close(); err != nil {
+		return fmt.Errorf("error closing buffer file: %v", err)
 	}
 	err = f.fs.cache.Chtimes(f.Name(), fstat.ModTime(), fstat.ModTime())
 	if f.info != nil {

@@ -2,10 +2,9 @@ package kafero
 
 // TODO
 
-/*
 import (
 	"fmt"
-	"os"
+	"io/ioutil"
 	"testing"
 )
 
@@ -15,21 +14,24 @@ func TestGcsFs_Create(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = fs.Create("dede/dedede/odkoadoadwak.tick")
+	file, err := fs.Create("test.txt")
 	if err != nil {
 		t.Fatalf("error creating file: %v", err)
 	}
 
-	err = Walk(fs, "dede", func(path string, info os.FileInfo, err error) error {
-		if info != nil && !info.IsDir() {
-			fmt.Println("walk", path)
-		}
-		return nil
-	})
-
-	if err != nil {
-		t.Fatalf("error walking dir: %v", err)
+	if _, err := file.Write([]byte("hello bb")); err != nil {
+		t.Fatal(err)
 	}
+	if err := file.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte("hello bb")); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	file2, err := fs.Open("test.txt")
+	b, err := ioutil.ReadAll(file2)
+	fmt.Println(string(b))
 }
-
-*/
