@@ -1,7 +1,7 @@
 module github.com/melaurent/kafero
 
 require (
-	cloud.google.com/go v0.72.0
+	cloud.google.com/go/storage v1.10.0
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pkg/sftp v1.10.0
