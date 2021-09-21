@@ -30,12 +30,13 @@ type SizeCacheFS struct {
 	base      Fs
 	cache     Fs
 	cacheSize int64
+	cacheTime time.Duration
 	currSize  int64
 	files     *sortedset.SortedSet
 	cacheL    sync.Mutex
 }
 
-func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
+func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64, cacheTime time.Duration) (*SizeCacheFS, error) {
 	if cacheSize < 0 {
 		cacheSize = 0
 	}
@@ -84,6 +85,7 @@ func NewSizeCacheFS(base Fs, cache Fs, cacheSize int64) (*SizeCacheFS, error) {
 		base:      base,
 		cache:     cache,
 		cacheSize: cacheSize,
+		cacheTime: cacheTime,
 		currSize:  currSize,
 		files:     set,
 	}
@@ -166,16 +168,52 @@ func (u *SizeCacheFS) removeFromCache(name string) {
 	}
 }
 
+/*
+
+func (u *CacheOnReadFs) cacheStatus(name string) (state cacheState, fi os.FileInfo, err error) {
+	var lfi, bfi os.FileInfo
+	lfi, err = u.layer.Stat(name)
+	if err == nil {
+		if u.cacheTime == 0 {
+			return cacheHit, lfi, nil
+		}
+		// TODO checking even if shouldnt ?
+		if lfi.ModTime().Add(u.cacheTime).Before(time.Now()) {
+			bfi, err = u.base.Stat(name)
+			if err != nil {
+				return cacheLocal, lfi, nil
+			}
+			if bfi.ModTime().After(lfi.ModTime()) {
+				return cacheStale, bfi, nil
+			}
+		}
+		return cacheHit, lfi, nil
+	}
+
+	if err == syscall.ENOENT || os.IsNotExist(err) {
+		return cacheMiss, nil, nil
+	}
+
+	return cacheMiss, nil, err
+}
+*/
+
 func (u *SizeCacheFS) cacheStatus(name string) (state cacheState, fi os.FileInfo, err error) {
 	var lfi, bfi os.FileInfo
 	lfi, err = u.cache.Stat(name)
 	if err == nil {
-		bfi, err = u.base.Stat(name)
-		if err != nil {
-			return cacheLocal, lfi, nil
+		if u.cacheTime == 0 {
+			return cacheHit, lfi, nil
 		}
-		if bfi.ModTime().After(lfi.ModTime()) {
-			return cacheStale, bfi, nil
+		// TODO checking even if shouldnt ?
+		if lfi.ModTime().Add(u.cacheTime).Before(time.Now()) {
+			bfi, err = u.base.Stat(name)
+			if err != nil {
+				return cacheLocal, lfi, nil
+			}
+			if bfi.ModTime().After(lfi.ModTime()) {
+				return cacheStale, bfi, nil
+			}
 		}
 		return cacheHit, lfi, nil
 	} else if err == syscall.ENOENT || os.IsNotExist(err) {
