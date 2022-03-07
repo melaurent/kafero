@@ -88,7 +88,6 @@ func (f *File) Readdir(n int) ([]os.FileInfo, error) {
 	if !(*output.IsTruncated) {
 		f.readdirNotTruncated = true
 	}
-	fmt.Println(output.CommonPrefixes, output.Contents)
 	var fis = make([]os.FileInfo, 0, len(output.CommonPrefixes)+len(output.Contents))
 	for _, subfolder := range output.CommonPrefixes {
 		fis = append(fis, NewFileInfo(path.Base("/"+*subfolder.Prefix), true, 0, time.Unix(0, 0)))

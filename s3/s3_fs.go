@@ -82,7 +82,6 @@ func (fs Fs) Create(name string) (kafero.File, error) {
 		if errPut != nil {
 			return nil, errPut
 		}
-		fmt.Println("SUCCESS PUT")
 	}
 
 	file, err := fs.OpenFile(name, os.O_WRONLY, 0750)
