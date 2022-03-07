@@ -77,9 +77,9 @@ func (f *File) Readdir(n int) ([]os.FileInfo, error) {
 	output, err := f.fs.s3API.ListObjectsV2(&s3.ListObjectsV2Input{
 		ContinuationToken: f.readdirContinuationToken,
 		Bucket:            aws.String(f.fs.bucket),
-		//Prefix:            aws.String(name),
-		//Delimiter:         aws.String("/"),
-		MaxKeys: aws.Int64(int64(n)),
+		Prefix:            aws.String(name),
+		Delimiter:         aws.String("/"),
+		MaxKeys:           aws.Int64(int64(n)),
 	})
 	if err != nil {
 		return nil, err
