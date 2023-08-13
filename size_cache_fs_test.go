@@ -9,7 +9,7 @@ import (
 
 func TestSizeCacheFS_Size(t *testing.T) {
 	// Write 10 10 bytes files, check if size is 100
-	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 1e+9)
+	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 1e+9, 0)
 	for i := 0; i < 10; i++ {
 		f, err := cacheFs.Create(fmt.Sprintf("%d.txt", i))
 		if err != nil {
@@ -42,7 +42,7 @@ func TestSizeCacheFS_Size(t *testing.T) {
 
 func TestSizeCacheFS_Evict(t *testing.T) {
 	// Write 11 10 bytes files, check if size is 100
-	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 100)
+	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 100, 0)
 	for i := 0; i < 11; i++ {
 		f, err := cacheFs.Create(fmt.Sprintf("%d.txt", i))
 		if err != nil {
@@ -75,7 +75,7 @@ func TestSizeCacheFS_Evict(t *testing.T) {
 
 func TestSizeCacheFS_EvictOpen(t *testing.T) {
 	// Write 11 10 bytes files, check if size is 100
-	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 100)
+	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 100, 0)
 
 	// Create first file
 	f, err := cacheFs.Create(fmt.Sprintf("%d.txt", 0))
@@ -126,7 +126,7 @@ func TestSizeCacheFS_EvictOpen(t *testing.T) {
 }
 
 func TestSizeCacheFS_Update(t *testing.T) {
-	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 100)
+	var cacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 100, 0)
 
 	// Create file
 	f, err := cacheFs.Create(fmt.Sprintf("%d.txt", 0))
@@ -170,7 +170,7 @@ func TestSizeCacheFS_Index(t *testing.T) {
 	cache := &MemMapFs{}
 
 	// Write 10 10 bytes files, check if size is 100
-	var cacheFs, _ = NewSizeCacheFS(cache, base, 100)
+	var cacheFs, _ = NewSizeCacheFS(cache, base, 100, 0)
 	for i := 0; i < 10; i++ {
 		f, err := cacheFs.Create(fmt.Sprintf("%d.txt", i))
 		if err != nil {
@@ -185,7 +185,7 @@ func TestSizeCacheFS_Index(t *testing.T) {
 	}
 
 	// Test index building
-	cacheFs, _ = NewSizeCacheFS(cache, base, 100)
+	cacheFs, _ = NewSizeCacheFS(cache, base, 100, 0)
 	if cacheFs.currSize != 100 {
 		t.Fatalf("was expecting cache size of 100, got %d", cacheFs.currSize)
 	}
@@ -195,7 +195,7 @@ func TestSizeCacheFS_Index(t *testing.T) {
 	}
 
 	// Test index marshal/unmarshal
-	cacheFs, _ = NewSizeCacheFS(cache, base, 100)
+	cacheFs, _ = NewSizeCacheFS(cache, base, 100, 0)
 	if cacheFs.currSize != 100 {
 		t.Fatalf("was expecting cache size of 100, got %d", cacheFs.currSize)
 	}
@@ -206,7 +206,7 @@ func TestSizeCacheFS_RemoveAll(t *testing.T) {
 	cache := &MemMapFs{}
 
 	// Write 10 10 bytes files, check if size is 100
-	var cacheFs, _ = NewSizeCacheFS(cache, base, 100)
+	var cacheFs, _ = NewSizeCacheFS(cache, base, 100, 0)
 
 	// Keep one file open
 	openF, err := cacheFs.Create("open.txt")
@@ -265,7 +265,7 @@ func TestSizeCacheFS_ReadEvicted(t *testing.T) {
 	cache := &MemMapFs{}
 
 	// Write 2 10 bytes files
-	var cacheFs, _ = NewSizeCacheFS(cache, base, 10)
+	var cacheFs, _ = NewSizeCacheFS(cache, base, 10, 0)
 	for i := 0; i < 2; i++ {
 		f, err := cacheFs.Create(fmt.Sprintf("%d.txt", i))
 		if err != nil {
@@ -307,7 +307,7 @@ func TestSizeCacheFSProfile(t *testing.T) {
 	cache := &MemMapFs{}
 
 	// Write 100 10 bytes files, check if size is 100
-	var cacheFs, _ = NewSizeCacheFS(base, cache, 100)
+	var cacheFs, _ = NewSizeCacheFS(base, cache, 100, 0)
 	for i := 0; i < 100; i++ {
 		f, err := cacheFs.Create(fmt.Sprintf("%d.txt", i))
 		if err != nil {

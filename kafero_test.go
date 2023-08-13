@@ -29,8 +29,8 @@ import (
 
 var testName = "test.txt"
 
-//var gcsFs, _ = NewTestGcsFs()
-var tmpCacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 0)
+// var gcsFs, _ = NewTestGcsFs()
+var tmpCacheFs, _ = NewSizeCacheFS(&MemMapFs{}, &MemMapFs{}, 0, 0)
 var Fss = []Fs{&MemMapFs{}, &OsFs{}, tmpCacheFs} //gcsFs}
 
 var testRegistry map[Fs][]string = make(map[Fs][]string)
@@ -59,7 +59,7 @@ func tmpFile(fs Fs) File {
 
 // TODO test "exotic" flags behavior with all the different file systems
 
-//Read with length 0 should not return EOF.
+// Read with length 0 should not return EOF.
 func TestRead0(t *testing.T) {
 	for _, fs := range Fss {
 		f := tmpFile(fs)

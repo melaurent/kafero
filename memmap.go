@@ -218,6 +218,8 @@ func (m *MemMapFs) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 		if flag&os.O_CREATE != 0 {
 			file, err = m.Create(name)
 			chmod = true
+		} else {
+			return nil, err
 		}
 	} else if err != nil {
 		// Error
