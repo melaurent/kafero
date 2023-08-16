@@ -71,7 +71,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 			return f.readOffset, nil
 		} else if offset >= f.readOffset {
 			// read and discard
-			buf := make([]byte, offset)
+			buf := make([]byte, offset-f.readOffset)
 			n, err := f.Read(buf)
 			if err != nil {
 				return 0, err
@@ -86,7 +86,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 			return f.readOffset, nil
 		} else if offset > 0 {
 			// read and discard
-			buf := make([]byte, offset)
+			buf := make([]byte, offset-f.readOffset)
 			n, err := f.Read(buf)
 			if err != nil {
 				return 0, err
@@ -144,4 +144,11 @@ func (f *File) Mmap(off int64, len int, prot, flags int) ([]byte, error) {
 
 func (f *File) Munmap() error {
 	return syscall.EPERM
+}
+
+func (f *File) Flush() error {
+	if f.writer != nil {
+		return f.writer.Flush()
+	}
+	return nil
 }
