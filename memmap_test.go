@@ -177,7 +177,11 @@ func TestMultipleOpenFiles(t *testing.T) {
 
 	var data = make([][]byte, len(Fss))
 
-	for i, fs := range Fss {
+	for i, config := range testConfigs {
+		if !config.CanSeek {
+			continue
+		}
+		fs := config.Fs
 		dir := tests.GetTmpDir(fs)
 		path := filepath.Join(dir, fileName)
 		fh1, err := fs.Create(path)
@@ -225,10 +229,11 @@ func TestMultipleOpenFiles(t *testing.T) {
 		}
 	}
 
-	for i, fs := range Fss {
-		if i == 0 {
+	for i, config := range testConfigs {
+		if !config.CanSeek || config.Fs.Name() == "MemMapFs" {
 			continue
 		}
+		fs := config.Fs
 		if string(data[0]) != string(data[i]) {
 			t.Errorf("%s and %s don't behave the same\n"+
 				"%s: \"%s\"\n%s: \"%s\"\n",
@@ -242,7 +247,8 @@ func TestReadOnly(t *testing.T) {
 	defer tests.RemoveAllTestFiles(t)
 	const fileName = "afero-demo.txt"
 
-	for _, fs := range Fss {
+	for _, config := range testConfigs {
+		fs := config.Fs
 		dir := tests.GetTmpDir(fs)
 		path := filepath.Join(dir, fileName)
 

@@ -26,7 +26,7 @@ func (b *Fs) OpenFile(name string, flag int, mode os.FileMode) (f kafero.File, e
 	if err != nil {
 		return nil, err
 	}
-	return &File{File: sourcef, fs: b.Fs}, nil
+	return &File{File: sourcef, fs: b.Fs, flag: flag}, nil
 }
 
 func (b *Fs) Open(name string) (f kafero.File, err error) {
@@ -34,7 +34,7 @@ func (b *Fs) Open(name string) (f kafero.File, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return &File{File: sourcef, fs: b.Fs}, nil
+	return &File{File: sourcef, fs: b.Fs, flag: os.O_RDONLY}, nil
 }
 
 func (b *Fs) Create(name string) (f kafero.File, err error) {
@@ -42,7 +42,7 @@ func (b *Fs) Create(name string) (f kafero.File, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return &File{File: sourcef, fs: b.Fs}, nil
+	return &File{File: sourcef, fs: b.Fs, flag: os.O_RDWR}, nil
 }
 
 // vim: ts=4 sw=4 noexpandtab nolist syn=go

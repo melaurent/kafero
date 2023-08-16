@@ -8,6 +8,7 @@ import (
 
 type File struct {
 	kafero.File
+	flag          int
 	fs            kafero.Fs
 	reader        *zstd.Decoder
 	writer        *zstd.Encoder
@@ -63,6 +64,9 @@ func (f *File) WriteString(s string) (ret int, err error) {
 }
 
 func (f *File) Write(p []byte) (n int, err error) {
+	if f.flag&syscall.O_WRONLY == 0 && f.flag&syscall.O_RDWR == 0 {
+		return 0, syscall.EPERM
+	}
 	if f.closed {
 		return 0, kafero.ErrFileClosed
 	}
