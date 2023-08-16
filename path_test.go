@@ -12,22 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafero
+package kafero_test
 
 import (
 	"fmt"
+	"github.com/melaurent/kafero"
+	"github.com/melaurent/kafero/tests"
 	"os"
 	"testing"
 )
 
 func TestWalk(t *testing.T) {
-	defer removeAllTestFiles(t)
+	defer tests.RemoveAllTestFiles(t)
 	var testDir string
 	for i, fs := range Fss {
 		if i == 0 {
-			testDir = setupTestDirRoot(t, fs)
+			testDir = tests.SetupTestDirRoot(t, fs)
 		} else {
-			setupTestDirReusePath(t, fs, testDir)
+			tests.SetupTestDirReusePath(t, fs, testDir)
 		}
 	}
 
@@ -44,7 +46,7 @@ func TestWalk(t *testing.T) {
 			outputs[i] += fmt.Sprintln(path, info.Name(), size, info.IsDir(), err)
 			return nil
 		}
-		err := Walk(fs, testDir, walkFn)
+		err := kafero.Walk(fs, testDir, walkFn)
 		if err != nil {
 			t.Error(err)
 		}

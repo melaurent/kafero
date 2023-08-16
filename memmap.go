@@ -49,7 +49,7 @@ func (m *MemMapFs) getData() map[string]*mem.FileData {
 func (*MemMapFs) Name() string { return "MemMapFS" }
 
 func (m *MemMapFs) Create(name string) (File, error) {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 	m.mu.Lock()
 	file := mem.CreateFile(name)
 	m.getData()[name] = file
@@ -110,7 +110,7 @@ func (m *MemMapFs) registerWithParent(f *mem.FileData) {
 }
 
 func (m *MemMapFs) lockfreeMkdir(name string, perm os.FileMode) error {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 	x, ok := m.getData()[name]
 	if ok {
 		// Only return ErrFileExists if it's a file, not a directory.
@@ -127,7 +127,7 @@ func (m *MemMapFs) lockfreeMkdir(name string, perm os.FileMode) error {
 }
 
 func (m *MemMapFs) Mkdir(name string, perm os.FileMode) error {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 
 	m.mu.RLock()
 	_, ok := m.getData()[name]
@@ -159,7 +159,7 @@ func (m *MemMapFs) MkdirAll(path string, perm os.FileMode) error {
 }
 
 // Handle some relative paths
-func normalizePath(path string) string {
+func NormalizePath(path string) string {
 	path = filepath.Clean(path)
 
 	switch path {
@@ -189,7 +189,7 @@ func (m *MemMapFs) openWrite(name string) (File, error) {
 }
 
 func (m *MemMapFs) open(name string) (*mem.FileData, error) {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 
 	m.mu.RLock()
 	f, ok := m.getData()[name]
@@ -201,7 +201,7 @@ func (m *MemMapFs) open(name string) (*mem.FileData, error) {
 }
 
 func (m *MemMapFs) lockfreeOpen(name string) (*mem.FileData, error) {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 	f, ok := m.getData()[name]
 	if ok {
 		return f, nil
@@ -253,7 +253,7 @@ func (m *MemMapFs) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 }
 
 func (m *MemMapFs) Remove(name string) error {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -271,7 +271,7 @@ func (m *MemMapFs) Remove(name string) error {
 }
 
 func (m *MemMapFs) RemoveAll(path string) error {
-	path = normalizePath(path)
+	path = NormalizePath(path)
 	m.mu.Lock()
 	m.unRegisterWithParent(path)
 	m.mu.Unlock()
@@ -292,8 +292,8 @@ func (m *MemMapFs) RemoveAll(path string) error {
 }
 
 func (m *MemMapFs) Rename(oldname, newname string) error {
-	oldname = normalizePath(oldname)
-	newname = normalizePath(newname)
+	oldname = NormalizePath(oldname)
+	newname = NormalizePath(newname)
 
 	if oldname == newname {
 		return nil
@@ -328,7 +328,7 @@ func (m *MemMapFs) Stat(name string) (os.FileInfo, error) {
 }
 
 func (m *MemMapFs) Chmod(name string, mode os.FileMode) error {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 
 	m.mu.RLock()
 	f, ok := m.getData()[name]
@@ -345,7 +345,7 @@ func (m *MemMapFs) Chmod(name string, mode os.FileMode) error {
 }
 
 func (m *MemMapFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	name = normalizePath(name)
+	name = NormalizePath(name)
 
 	m.mu.RLock()
 	f, ok := m.getData()[name]

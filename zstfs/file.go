@@ -26,6 +26,10 @@ func (f *File) Close() error {
 		f.reader.Close()
 		f.reader = nil
 	}
+	if err := f.File.Close(); err != nil {
+		return err
+	}
+	f.closed = true
 	return nil
 }
 
@@ -54,6 +58,10 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	return 0, syscall.EPERM
 }
 
+func (f *File) WriteString(s string) (ret int, err error) {
+	return f.Write([]byte(s))
+}
+
 func (f *File) Write(p []byte) (n int, err error) {
 	if f.closed {
 		return 0, kafero.ErrFileClosed
@@ -69,6 +77,14 @@ func (f *File) Write(p []byte) (n int, err error) {
 		}
 	}
 	return f.writer.Write(p)
+}
+
+func (f *File) WriteAt(p []byte, off int64) (n int, err error) {
+	return 0, syscall.EPERM
+}
+
+func (f *File) Truncate(size int64) error {
+	return syscall.EPERM
 }
 
 func (f *File) CanMmap() bool {

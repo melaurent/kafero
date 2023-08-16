@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafero
+package kafero_test
 
 import (
+	"github.com/melaurent/kafero"
+	"github.com/melaurent/kafero/tests"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,18 +33,19 @@ func contains(vector []string, s string) bool {
 	return false
 }
 
-func setupGlobDirRoot(t *testing.T, fs Fs) string {
-	path := testDir(fs)
+func setupGlobDirRoot(t *testing.T, fs kafero.Fs) string {
+	path := tests.GetTmpDir(fs)
 	setupGlobFiles(t, fs, path)
 	return path
 }
 
-func setupGlobDirReusePath(t *testing.T, fs Fs, path string) string {
-	testRegistry[fs] = append(testRegistry[fs], path)
+func setupGlobDirReusePath(t *testing.T, fs kafero.Fs, path string) string {
+	// TODO
+	//testRegistry[fs] = append(testRegistry[fs], path)
 	return setupGlobFiles(t, fs, path)
 }
 
-func setupGlobFiles(t *testing.T, fs Fs, path string) string {
+func setupGlobFiles(t *testing.T, fs kafero.Fs, path string) string {
 	testSubDir := filepath.Join(path, "globs", "bobs")
 	err := fs.MkdirAll(testSubDir, 0700)
 	if err != nil && !os.IsExist(err) {
@@ -74,7 +77,7 @@ func setupGlobFiles(t *testing.T, fs Fs, path string) string {
 }
 
 func TestGlob(t *testing.T) {
-	defer removeAllTestFiles(t)
+	defer tests.RemoveAllTestFiles(t)
 	var testDir string
 	for i, fs := range Fss {
 		if i == 0 {
@@ -102,7 +105,7 @@ func TestGlob(t *testing.T) {
 				pattern = filepath.Clean(pattern)
 				result = filepath.Clean(result)
 			}
-			matches, err := Glob(fs, pattern)
+			matches, err := kafero.Glob(fs, pattern)
 			if err != nil {
 				t.Errorf("Glob error for %q: %s", pattern, err)
 				continue
@@ -112,7 +115,7 @@ func TestGlob(t *testing.T) {
 			}
 		}
 		for _, pattern := range []string{"no_match", "../*/no_match"} {
-			matches, err := Glob(fs, pattern)
+			matches, err := kafero.Glob(fs, pattern)
 			if err != nil {
 				t.Errorf("Glob error for %q: %s", pattern, err)
 				continue
@@ -126,9 +129,9 @@ func TestGlob(t *testing.T) {
 }
 
 func TestGlobSymlink(t *testing.T) {
-	defer removeAllTestFiles(t)
+	defer tests.RemoveAllTestFiles(t)
 
-	fs := &OsFs{}
+	fs := &kafero.OsFs{}
 	testDir := setupGlobDirRoot(t, fs)
 
 	err := os.Symlink("target", filepath.Join(testDir, "symlink"))
@@ -162,7 +165,7 @@ func TestGlobSymlink(t *testing.T) {
 			// Break the symlink.
 			fs.Remove(path)
 		}
-		matches, err := Glob(fs, dest)
+		matches, err := kafero.Glob(fs, dest)
 		if err != nil {
 			t.Errorf("GlobSymlink error for %q: %s", dest, err)
 		}
@@ -172,10 +175,9 @@ func TestGlobSymlink(t *testing.T) {
 	}
 }
 
-
 func TestGlobError(t *testing.T) {
 	for _, fs := range Fss {
-		_, err := Glob(fs, "[7]")
+		_, err := kafero.Glob(fs, "[7]")
 		if err != nil {
 			t.Error("expected error for bad pattern; got none")
 		}

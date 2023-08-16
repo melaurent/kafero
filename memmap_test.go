@@ -1,7 +1,9 @@
-package kafero
+package kafero_test
 
 import (
 	"fmt"
+	"github.com/melaurent/kafero"
+	"github.com/melaurent/kafero/tests"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,16 +19,16 @@ func TestNormalizePath(t *testing.T) {
 	}
 
 	data := []test{
-		{".", FilePathSeparator},
-		{"./", FilePathSeparator},
-		{"..", FilePathSeparator},
-		{"../", FilePathSeparator},
-		{"./..", FilePathSeparator},
-		{"./../", FilePathSeparator},
+		{".", kafero.FilePathSeparator},
+		{"./", kafero.FilePathSeparator},
+		{"..", kafero.FilePathSeparator},
+		{"../", kafero.FilePathSeparator},
+		{"./..", kafero.FilePathSeparator},
+		{"./../", kafero.FilePathSeparator},
 	}
 
 	for i, d := range data {
-		cpath := normalizePath(d.input)
+		cpath := kafero.NormalizePath(d.input)
 		if d.expected != cpath {
 			t.Errorf("Test %d failed. Expected %q got %q", i, d.expected, cpath)
 		}
@@ -36,7 +38,7 @@ func TestNormalizePath(t *testing.T) {
 func TestPathErrors(t *testing.T) {
 	path := filepath.Join(".", "some", "path")
 	path2 := filepath.Join(".", "different", "path")
-	fs := NewMemMapFs()
+	fs := kafero.NewMemMapFs()
 	perm := os.FileMode(0755)
 
 	// relevant functions:
@@ -114,7 +116,7 @@ func TestPermSet(t *testing.T) {
 	// directories will also have the directory bit set
 	const dirMode = fileMode | os.ModeDir
 
-	fs := NewMemMapFs()
+	fs := kafero.NewMemMapFs()
 
 	// Test Openfile
 	f, err := fs.OpenFile(fileName, os.O_CREATE, fileMode)
@@ -170,13 +172,13 @@ func TestPermSet(t *testing.T) {
 
 // Fails if multiple file objects use the same file.at counter in MemMapFs
 func TestMultipleOpenFiles(t *testing.T) {
-	defer removeAllTestFiles(t)
+	defer tests.RemoveAllTestFiles(t)
 	const fileName = "afero-demo2.txt"
 
 	var data = make([][]byte, len(Fss))
 
 	for i, fs := range Fss {
-		dir := testDir(fs)
+		dir := tests.GetTmpDir(fs)
 		path := filepath.Join(dir, fileName)
 		fh1, err := fs.Create(path)
 		if err != nil {
@@ -217,7 +219,7 @@ func TestMultipleOpenFiles(t *testing.T) {
 			t.Error(err)
 		}
 		// the file now should contain "datadata"
-		data[i], err = ReadFile(fs, path)
+		data[i], err = kafero.ReadFile(fs, path)
 		if err != nil {
 			t.Error(err)
 		}
@@ -237,11 +239,11 @@ func TestMultipleOpenFiles(t *testing.T) {
 
 // Test if file.Write() fails when opened as read only
 func TestReadOnly(t *testing.T) {
-	defer removeAllTestFiles(t)
+	defer tests.RemoveAllTestFiles(t)
 	const fileName = "afero-demo.txt"
 
 	for _, fs := range Fss {
-		dir := testDir(fs)
+		dir := tests.GetTmpDir(fs)
 		path := filepath.Join(dir, fileName)
 
 		f, err := fs.Create(path)
@@ -277,11 +279,11 @@ func TestReadOnly(t *testing.T) {
 }
 
 func TestWriteCloseTime(t *testing.T) {
-	defer removeAllTestFiles(t)
+	defer tests.RemoveAllTestFiles(t)
 	const fileName = "afero-demo.txt"
 
 	for _, fs := range Fss {
-		dir := testDir(fs)
+		dir := tests.GetTmpDir(fs)
 		path := filepath.Join(dir, fileName)
 
 		f, err := fs.Create(path)
@@ -329,7 +331,7 @@ func TestWriteCloseTime(t *testing.T) {
 // This test should be run with the race detector on:
 // go test -race -v -timeout 10s -run TestRacingDeleteAndClose
 func TestRacingDeleteAndClose(t *testing.T) {
-	fs := NewMemMapFs()
+	fs := kafero.NewMemMapFs()
 	pathname := "testfile"
 	f, err := fs.Create(pathname)
 	if err != nil {
@@ -353,7 +355,7 @@ func TestRacingDeleteAndClose(t *testing.T) {
 // go test -run TestMemFsDataRace -race
 func TestMemFsDataRace(t *testing.T) {
 	const dir = "test_dir"
-	fs := NewMemMapFs()
+	fs := kafero.NewMemMapFs()
 
 	if err := fs.MkdirAll(dir, 0777); err != nil {
 		t.Fatal(err)
@@ -366,7 +368,7 @@ func TestMemFsDataRace(t *testing.T) {
 		defer close(done)
 		for i := 0; i < n; i++ {
 			fname := filepath.Join(dir, fmt.Sprintf("%d.txt", i))
-			if err := WriteFile(fs, fname, []byte(""), 0777); err != nil {
+			if err := kafero.WriteFile(fs, fname, []byte(""), 0777); err != nil {
 				panic(err)
 			}
 			if err := fs.Remove(fname); err != nil {
@@ -381,7 +383,7 @@ loop:
 		case <-done:
 			break loop
 		default:
-			_, err := ReadDir(fs, dir)
+			_, err := kafero.ReadDir(fs, dir)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -390,7 +392,7 @@ loop:
 }
 
 func TestMemFsDirMode(t *testing.T) {
-	fs := NewMemMapFs()
+	fs := kafero.NewMemMapFs()
 	err := fs.Mkdir("/testDir1", 0644)
 	if err != nil {
 		t.Error(err)
@@ -424,9 +426,9 @@ func TestMemFsDirMode(t *testing.T) {
 func TestMemFsUnexpectedEOF(t *testing.T) {
 	t.Parallel()
 
-	fs := NewMemMapFs()
+	fs := kafero.NewMemMapFs()
 
-	if err := WriteFile(fs, "file.txt", []byte("abc"), 0777); err != nil {
+	if err := kafero.WriteFile(fs, "file.txt", []byte("abc"), 0777); err != nil {
 		t.Fatal(err)
 	}
 

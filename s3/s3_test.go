@@ -10,7 +10,6 @@ import (
 	"io"
 	"math/rand"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,44 +18,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
-
-func TestB2(t *testing.T) {
-	bucket := aws.String("tested-p")
-	key := aws.String("testfile.txt")
-
-	s3Config := &aws.Config{
-		Credentials:      credentials.NewStaticCredentials("004baf0f66898690000000003", "K004xbhfLjxHYWUSSIV4baPOy35WqQI", ""),
-		Endpoint:         aws.String("https://s3.us-west-004.backblazeb2.com"),
-		Region:           aws.String("us-west-004"),
-		S3ForcePathStyle: aws.Bool(true),
-	}
-	newSession := session.New(s3Config)
-
-	s3Client := s3.New(newSession)
-
-	// Upload a new object "testfile.txt" with the string "S3 Compatible API"
-	_, err := s3Client.PutObject(&s3.PutObjectInput{
-		Body:   strings.NewReader("S3 Compatible API"),
-		Bucket: bucket,
-		Key:    key,
-	})
-	if err != nil {
-		fmt.Printf("Failed to upload object %s/%s, %s\n", *bucket, *key, err.Error())
-		return
-	}
-	fmt.Printf("Successfully uploaded key %s\n", *key)
-
-	//Get Object
-	_, err = s3Client.GetObject(&s3.GetObjectInput{
-		Bucket: bucket,
-		Key:    key,
-	})
-	if err != nil {
-		fmt.Println("Failed to download file", err)
-		return
-	}
-	fmt.Printf("Successfully Downloaded key %s\n", *key)
-}
 
 func TestCompatiblekaferoS3(t *testing.T) {
 	var _ kafero.Fs = (*Fs)(nil)
@@ -101,13 +62,10 @@ func __getS3Fs(t *testing.T) *Fs {
 	fs := NewFs(bucketName, sess)
 
 	t.Cleanup(func() {
-		/*
-			if err := fs.RemoveAll("/"); err != nil {
-				t.Fatal("Could not cleanup bucket:", err)
-				return
-			}
-
-		*/
+		if err := fs.RemoveAll("/"); err != nil {
+			t.Fatal("Could not cleanup bucket:", err)
+			return
+		}
 
 		// The minio implementation makes the RemoveAll("/") also delete the simulated S3 bucket, so we *should* but
 		// *can't* use the bucket deletion.
@@ -120,17 +78,7 @@ func __getS3Fs(t *testing.T) *Fs {
 }
 
 func TestList(t *testing.T) {
-	sess, errSession := session.NewSession(&aws.Config{
-		Credentials:      credentials.NewStaticCredentials("0032e07e054951f0000000001", "K003Cgp/1Vu+9M7+piIN26yXn9QwdYg", ""),
-		Endpoint:         aws.String("https://s3.eu-central-003.backblazeb2.com"),
-		Region:           aws.String("eu-central-003"),
-		S3ForcePathStyle: aws.Bool(true),
-	})
-
-	if errSession != nil {
-		t.Fatal("Could not create session:", errSession)
-	}
-	fs := NewFs("testeder-r", sess)
+	fs := __getS3Fs(t)
 	f, err := fs.Open("/dir1")
 	if err != nil {
 		t.Fatal(err)
@@ -249,7 +197,7 @@ func TestFileSeekBig(t *testing.T) {
 	}
 }
 
-//nolint: gocyclo, funlen
+// nolint: gocyclo, funlen
 func TestFileSeekBasic(t *testing.T) {
 	fs := GetFs(t)
 	req := require.New(t)
@@ -448,6 +396,9 @@ func TestRemoveAll(t *testing.T) {
 		if files, err := root.Readdir(-1); err != nil {
 			t.Fatal("Could not readdir:", err)
 		} else if len(files) != 0 {
+			for _, file := range files {
+				t.Log("File:", file.Name())
+			}
 			t.Fatal("We should not have any files !")
 		}
 	}
@@ -702,14 +653,14 @@ func TestContentType(t *testing.T) {
 
 	t.Run("MimeChecks", func(t *testing.T) {
 		fileToMime := map[string]string{
-			"file.jpg":       "image/jpeg",
-			"file.jpeg":      "image/jpeg",
-			"file.png":       "image/png",
-			"file.txt":       "text/plain;charset=utf-8",
-			"file.html":      "text/html;charset=utf-8",
-			"file.htm":       "text/html;charset=utf-8",
-			"something.else": "application/octet-stream",
-			"something":      "application/octet-stream",
+			"file.jpg":  "image/jpeg",
+			"file.jpeg": "image/jpeg",
+			"file.png":  "image/png",
+			"file.txt":  "text/plain;charset=utf-8",
+			"file.html": "text/html;charset=utf-8",
+			"file.htm":  "text/html;charset=utf-8",
+			//"something.else": "application/octet-stream",
+			//"something":      "application/octet-stream",
 		}
 
 		// We write each file
@@ -788,7 +739,6 @@ func TestFileProps(t *testing.T) {
 			req.Equal(cacheControl, *resp.CacheControl)
 		}
 	})
-
 }
 
 func TestFileReaddir(t *testing.T) {

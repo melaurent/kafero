@@ -41,6 +41,10 @@ func readDirNames(fs Fs, dirname string) ([]string, error) {
 	return names, nil
 }
 
+func ReadDirNames(fs Fs, dirname string) ([]string, error) {
+	return readDirNames(fs, dirname)
+}
+
 // walk recursively descends path, calling walkFn
 // adapted from https://golang.org/src/path/filepath/path.go
 func walk(fs Fs, path string, info os.FileInfo, walkFn filepath.WalkFunc) error {

@@ -1,7 +1,6 @@
 package zstfs
 
 import (
-	"fmt"
 	"github.com/klauspost/compress/zstd"
 	"github.com/melaurent/kafero"
 	"os"
@@ -19,7 +18,7 @@ func NewFs(source kafero.Fs, level zstd.EncoderLevel) kafero.Fs {
 }
 
 func (b *Fs) Name() string {
-	return "Fs"
+	return "ZSTFs"
 }
 
 func (b *Fs) OpenFile(name string, flag int, mode os.FileMode) (f kafero.File, err error) {
@@ -27,7 +26,6 @@ func (b *Fs) OpenFile(name string, flag int, mode os.FileMode) (f kafero.File, e
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("OPENFILE", name, flag, mode, sourcef, err)
 	return &File{File: sourcef, fs: b.Fs}, nil
 }
 

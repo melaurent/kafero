@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"errors"
 	"github.com/melaurent/kafero"
 	"io"
 	"math/rand"
@@ -38,7 +39,7 @@ func (r *LimitedReader) Read(buffer []byte) (int, error) {
 	return read, err
 }
 
-// Source: rog's code from https://groups.google.com/forum/#!topic/golang-nuts/keG78hYt1I0
+// ReadersEqual Source: rog's code from https://groups.google.com/forum/#!topic/golang-nuts/keG78hYt1I0
 func ReadersEqual(r1, r2 io.Reader) (bool, error) {
 	const chunkSize = 8 * 1024 // 8 KB
 	buf1 := make([]byte, chunkSize)
@@ -46,10 +47,10 @@ func ReadersEqual(r1, r2 io.Reader) (bool, error) {
 	for {
 		n1, err1 := io.ReadFull(r1, buf1)
 		n2, err2 := io.ReadFull(r2, buf2)
-		if err1 != nil && err1 != io.EOF && err1 != io.ErrUnexpectedEOF {
+		if err1 != nil && err1 != io.EOF && !errors.Is(err1, io.ErrUnexpectedEOF) {
 			return false, err1
 		}
-		if err2 != nil && err2 != io.EOF && err2 != io.ErrUnexpectedEOF {
+		if err2 != nil && err2 != io.EOF && !errors.Is(err2, io.ErrUnexpectedEOF) {
 			return false, err2
 		}
 		if (err1 != nil) != (err2 != nil) || !bytes.Equal(buf1[0:n1], buf2[0:n2]) {
