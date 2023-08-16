@@ -3,6 +3,7 @@ package zstfs
 import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/melaurent/kafero"
+	"io"
 	"syscall"
 )
 
@@ -12,6 +13,7 @@ type File struct {
 	fs            kafero.Fs
 	reader        *zstd.Decoder
 	writer        *zstd.Encoder
+	readOffset    int
 	isdir, closed bool
 }
 
@@ -48,7 +50,13 @@ func (f *File) Read(p []byte) (n int, err error) {
 			return 0, err
 		}
 	}
-	return f.reader.Read(p)
+	n, err = f.reader.Read(p)
+	if err != nil {
+		return n, err
+	}
+	// progress
+	f.readOffset += n
+	return n, nil
 }
 
 func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
@@ -56,6 +64,31 @@ func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
+	// Allow seek if it would result in a seek to the current position.
+	switch whence {
+	case io.SeekStart:
+		if offset == 0 && f.readOffset == 0 {
+			return 0, nil
+		} else {
+			return 0, syscall.EPERM
+		}
+	case io.SeekCurrent:
+		if offset == 0 {
+			return 0, nil
+		} else if offset > 0 {
+			// read and discard
+			buf := make([]byte, offset)
+			n, err := f.Read(buf)
+			if err != nil {
+				return 0, err
+			}
+			return int64(n), nil
+		} else {
+			return 0, syscall.EPERM
+		}
+	case io.SeekEnd:
+		return 0, syscall.EPERM
+	}
 	return 0, syscall.EPERM
 }
 
