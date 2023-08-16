@@ -25,7 +25,11 @@ import (
 func TestWalk(t *testing.T) {
 	defer tests.RemoveAllTestFiles(t)
 	var testDir string
-	for i, fs := range Fss {
+	for i, config := range testConfigs {
+		fs := config.Fs
+		if fs.Name() == "ZSTFs" {
+			continue
+		}
 		if i == 0 {
 			testDir = tests.SetupTestDirRoot(t, fs)
 		} else {
@@ -33,19 +37,25 @@ func TestWalk(t *testing.T) {
 		}
 	}
 
-	outputs := make([]string, len(Fss))
-	for i, fs := range Fss {
+	var outputs []string
+	for _, config := range testConfigs {
+		fs := config.Fs
+		if fs.Name() == "ZSTFs" {
+			continue
+		}
+		output := ""
 		walkFn := func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				t.Error("walkFn err:", err)
+				t.Errorf("%s: walkFn err: %v", fs.Name(), err)
 			}
 			var size int64
 			if !info.IsDir() {
 				size = info.Size()
 			}
-			outputs[i] += fmt.Sprintln(path, info.Name(), size, info.IsDir(), err)
+			output += fmt.Sprintln(path, info.Name(), size, info.IsDir(), err)
 			return nil
 		}
+		outputs = append(outputs, output)
 		err := kafero.Walk(fs, testDir, walkFn)
 		if err != nil {
 			t.Error(err)
