@@ -13,7 +13,7 @@ type File struct {
 	fs            kafero.Fs
 	reader        *zstd.Decoder
 	writer        *zstd.Encoder
-	readOffset    int
+	readOffset    int64
 	isdir, closed bool
 }
 
@@ -55,7 +55,7 @@ func (f *File) Read(p []byte) (n int, err error) {
 		return n, err
 	}
 	// progress
-	f.readOffset += n
+	f.readOffset += int64(n)
 	return n, nil
 }
 
@@ -68,13 +68,13 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		if offset == 0 && f.readOffset == 0 {
-			return 0, nil
+			return f.readOffset, nil
 		} else {
 			return 0, syscall.EPERM
 		}
 	case io.SeekCurrent:
 		if offset == 0 {
-			return 0, nil
+			return f.readOffset, nil
 		} else if offset > 0 {
 			// read and discard
 			buf := make([]byte, offset)
@@ -82,7 +82,8 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 			if err != nil {
 				return 0, err
 			}
-			return int64(n), nil
+			f.readOffset += int64(n)
+			return f.readOffset, nil
 		} else {
 			return 0, syscall.EPERM
 		}
