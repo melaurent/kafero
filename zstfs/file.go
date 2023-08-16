@@ -69,6 +69,15 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekStart:
 		if offset == 0 && f.readOffset == 0 {
 			return f.readOffset, nil
+		} else if offset >= f.readOffset {
+			// read and discard
+			buf := make([]byte, offset)
+			n, err := f.Read(buf)
+			if err != nil {
+				return 0, err
+			}
+			f.readOffset += int64(n)
+			return f.readOffset, nil
 		} else {
 			return 0, syscall.EPERM
 		}
