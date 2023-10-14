@@ -2,6 +2,7 @@ package kafero
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/wangjia184/sortedset"
 	"io"
@@ -120,7 +121,9 @@ func (u *SizeCacheFS) addToCache(info *cacheFile) error {
 		// node CAN'T be nil as currSize > 0
 		file := node.Value.(*cacheFile)
 		if err := u.cache.Remove(file.Path); err != nil {
-			return fmt.Errorf("error removing cache file: %v", err)
+			if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("error removing cache file: %v", err)
+			}
 		}
 		u.currSize -= file.Size
 		path := filepath.Dir(file.Path)

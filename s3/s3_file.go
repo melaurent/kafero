@@ -84,6 +84,7 @@ func (f *File) Readdir(n int) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	//fmt.Println("CALLING LIST OBJECTS", time.Since(start))
 	f.readdirContinuationToken = output.NextContinuationToken
 	if !(*output.IsTruncated) {
 		f.readdirNotTruncated = true
