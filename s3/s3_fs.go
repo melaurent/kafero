@@ -148,6 +148,7 @@ func (fs *Fs) OpenFile(name string, flag int, _ os.FileMode) (kafero.File, error
 	info, err := file.Stat()
 
 	if err != nil {
+		fmt.Println("ERROR ON STAT", err)
 		return nil, err
 	}
 

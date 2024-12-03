@@ -326,6 +326,7 @@ func (f *File) openWriteStream() error {
 		_, err := uploader.Upload(input)
 
 		if err != nil {
+			fmt.Println("ERROR UPLOADING", err)
 			f.streamWriteErr = err
 			_ = f.streamWrite.Close()
 		}

@@ -130,7 +130,12 @@ func (u *SizeCacheFS) addToCache(info *cacheFile) error {
 		for path != "" && path != "." && path != "/" {
 			f, err := u.cache.Open(path)
 			if err != nil {
-				return fmt.Errorf("error opening parent directory: %v", err)
+				if !errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("error opening parent directory: %v", err)
+				} else {
+					path = filepath.Dir(path)
+					continue
+				}
 			}
 			dirs, err := f.Readdir(-1)
 			if err != nil {
