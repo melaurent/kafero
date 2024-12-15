@@ -8,7 +8,7 @@ require (
 	github.com/pkg/sftp v1.10.0
 	github.com/stretchr/testify v1.4.0
 	github.com/wangjia184/sortedset v0.0.0-20160527075905-f5d03557ba30
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.3.8
 	google.golang.org/api v0.36.0
 )
 
